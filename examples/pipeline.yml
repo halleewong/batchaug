@@ -15,6 +15,17 @@ transforms:
     - vol
     - seg
     prob: 0.15
+- _class: monai.transforms.RandAffined
+    keys:
+    - vol
+    - seg
+    prob: 0.15
+    mode:
+    - bilinear
+    - nearest
+    rotate_range: 0.7853981633974483
+    shear_range: 0.3
+    translate_range: 5
 - _class: monai.transforms.RandSimulateLowResolutiond
     keys:
     - vol
@@ -66,17 +77,6 @@ transforms:
     keys:
     - vol
     prob: 0.15
-- _class: monai.transforms.RandAffined
-    keys:
-    - vol
-    - seg
-    prob: 0.15
-    mode:
-    - bilinear
-    - nearest
-    rotate_range: 0.7853981633974483
-    shear_range: 0.3
-    translate_range: 5
 - _class: monai.transforms.ScaleIntensityd
     keys:
     - vol

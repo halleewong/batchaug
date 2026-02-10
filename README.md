@@ -132,3 +132,12 @@ noisy_vol = t.apply(vol, params)
 | `RandSimulateLowResolution` | `RandSimulateLowResolutiond` | Downsample/upsample simulation |
 | `RandBiasField` | `RandBiasFieldd` | Polynomial bias field |
 | `RandGibbsNoise` | `RandGibbsNoised` | FFT-based Gibbs ringing |
+
+
+# Development
+
+## Run Tests
+
+```
+python -m pytest tests/ -v
+```
