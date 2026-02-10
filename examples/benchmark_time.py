@@ -157,6 +157,66 @@ def bench_one_rand_gaussian_noise(B, C, S, repeats):
     return monai_ms, ba_ms
 
 
+def bench_one_rand_adjust_contrast(B, C, S, repeats):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    batch = {"vol": vol}
+
+    ba_t = batchaug.RandAdjustContrastd(keys=["vol"], prob=1.0, gamma=(0.5, 4.5))
+    ba_ms = cuda_timer(lambda: ba_t(batch), repeats=repeats)
+
+    monai_t = monai.transforms.RandAdjustContrastd(keys=["vol"], prob=1.0, gamma=(0.5, 4.5))
+    monai_ms = cuda_timer(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol"]),
+        repeats=repeats,
+    )
+    return monai_ms, ba_ms
+
+
+def bench_one_rand_gaussian_smooth(B, C, S, repeats):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    batch = {"vol": vol}
+
+    ba_t = batchaug.RandGaussianSmoothd(keys=["vol"], prob=1.0)
+    ba_ms = cuda_timer(lambda: ba_t(batch), repeats=repeats)
+
+    monai_t = monai.transforms.RandGaussianSmoothd(keys=["vol"], prob=1.0)
+    monai_ms = cuda_timer(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol"]),
+        repeats=repeats,
+    )
+    return monai_ms, ba_ms
+
+
+def bench_one_rand_gaussian_sharpen(B, C, S, repeats):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    batch = {"vol": vol}
+
+    ba_t = batchaug.RandGaussianSharpend(keys=["vol"], prob=1.0)
+    ba_ms = cuda_timer(lambda: ba_t(batch), repeats=repeats)
+
+    monai_t = monai.transforms.RandGaussianSharpend(keys=["vol"], prob=1.0)
+    monai_ms = cuda_timer(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol"]),
+        repeats=repeats,
+    )
+    return monai_ms, ba_ms
+
+
+def bench_one_rand_simulate_low_resolution(B, C, S, repeats):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    batch = {"vol": vol}
+
+    ba_t = batchaug.RandSimulateLowResolutiond(keys=["vol"], prob=1.0, zoom_range=(0.5, 1.0))
+    ba_ms = cuda_timer(lambda: ba_t(batch), repeats=repeats)
+
+    monai_t = monai.transforms.RandSimulateLowResolutiond(keys=["vol"], prob=1.0, zoom_range=(0.5, 1.0))
+    monai_ms = cuda_timer(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol"]),
+        repeats=repeats,
+    )
+    return monai_ms, ba_ms
+
+
 # ---------------------------------------------------------------------------
 # Table printing
 # ---------------------------------------------------------------------------
@@ -167,6 +227,10 @@ BENCHMARKS = {
     "RandAxisFlipd": bench_one_rand_axis_flip,
     "RandRotate90d": bench_one_rand_rotate90,
     "RandGaussianNoised": bench_one_rand_gaussian_noise,
+    "RandAdjustContrastd": bench_one_rand_adjust_contrast,
+    "RandGaussianSmoothd": bench_one_rand_gaussian_smooth,
+    "RandGaussianSharpend": bench_one_rand_gaussian_sharpen,
+    "RandSimulateLowResolutiond": bench_one_rand_simulate_low_resolution,
 }
 
 

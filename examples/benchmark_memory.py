@@ -174,6 +174,86 @@ def bench_one_rand_gaussian_noise(B, C, S):
     return monai_mb, ba_mb, in_mb
 
 
+def bench_one_rand_adjust_contrast(B, C, S):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    batch = {"vol": vol}
+    in_mb = input_size_mb(B, C, S, n_tensors=1)
+
+    ba_t = batchaug.RandAdjustContrastd(keys=["vol"], prob=1.0, gamma=(0.5, 4.5))
+    ba_t(batch)
+    ba_mb = measure_peak_mb(lambda: ba_t(batch))
+
+    monai_t = monai.transforms.RandAdjustContrastd(keys=["vol"], prob=1.0, gamma=(0.5, 4.5))
+    monai_per_sample_loop(monai_t, batch, ["vol"])
+    monai_mb = measure_peak_mb(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol"])
+    )
+
+    del vol, batch
+    torch.cuda.empty_cache()
+    return monai_mb, ba_mb, in_mb
+
+
+def bench_one_rand_gaussian_smooth(B, C, S):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    batch = {"vol": vol}
+    in_mb = input_size_mb(B, C, S, n_tensors=1)
+
+    ba_t = batchaug.RandGaussianSmoothd(keys=["vol"], prob=1.0)
+    ba_t(batch)
+    ba_mb = measure_peak_mb(lambda: ba_t(batch))
+
+    monai_t = monai.transforms.RandGaussianSmoothd(keys=["vol"], prob=1.0)
+    monai_per_sample_loop(monai_t, batch, ["vol"])
+    monai_mb = measure_peak_mb(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol"])
+    )
+
+    del vol, batch
+    torch.cuda.empty_cache()
+    return monai_mb, ba_mb, in_mb
+
+
+def bench_one_rand_gaussian_sharpen(B, C, S):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    batch = {"vol": vol}
+    in_mb = input_size_mb(B, C, S, n_tensors=1)
+
+    ba_t = batchaug.RandGaussianSharpend(keys=["vol"], prob=1.0)
+    ba_t(batch)
+    ba_mb = measure_peak_mb(lambda: ba_t(batch))
+
+    monai_t = monai.transforms.RandGaussianSharpend(keys=["vol"], prob=1.0)
+    monai_per_sample_loop(monai_t, batch, ["vol"])
+    monai_mb = measure_peak_mb(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol"])
+    )
+
+    del vol, batch
+    torch.cuda.empty_cache()
+    return monai_mb, ba_mb, in_mb
+
+
+def bench_one_rand_simulate_low_resolution(B, C, S):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    batch = {"vol": vol}
+    in_mb = input_size_mb(B, C, S, n_tensors=1)
+
+    ba_t = batchaug.RandSimulateLowResolutiond(keys=["vol"], prob=1.0, zoom_range=(0.5, 1.0))
+    ba_t(batch)
+    ba_mb = measure_peak_mb(lambda: ba_t(batch))
+
+    monai_t = monai.transforms.RandSimulateLowResolutiond(keys=["vol"], prob=1.0, zoom_range=(0.5, 1.0))
+    monai_per_sample_loop(monai_t, batch, ["vol"])
+    monai_mb = measure_peak_mb(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol"])
+    )
+
+    del vol, batch
+    torch.cuda.empty_cache()
+    return monai_mb, ba_mb, in_mb
+
+
 # ---------------------------------------------------------------------------
 # Table printing
 # ---------------------------------------------------------------------------
@@ -184,6 +264,10 @@ BENCHMARKS = {
     "RandAxisFlipd": bench_one_rand_axis_flip,
     "RandRotate90d": bench_one_rand_rotate90,
     "RandGaussianNoised": bench_one_rand_gaussian_noise,
+    "RandAdjustContrastd": bench_one_rand_adjust_contrast,
+    "RandGaussianSmoothd": bench_one_rand_gaussian_smooth,
+    "RandGaussianSharpend": bench_one_rand_gaussian_sharpen,
+    "RandSimulateLowResolutiond": bench_one_rand_simulate_low_resolution,
 }
 
 
