@@ -35,6 +35,41 @@ class RandRotate90(BatchTransform):
         params["k"] = torch.randint(1, self.max_k + 1, (batch_size,), device=device)
         return params
 
+    def to_affine(self, params: dict) -> torch.Tensor:
+        """Return (B, 4, 4) MONAI-convention affine for the 90-degree rotation.
+
+        Rotation by k*90 degrees in the (ax0, ax1) plane uses exact
+        cos/sin values {0, +/-1}. Masked-out elements get identity.
+        """
+        mask = params["mask"]
+        k_values = params["k"]
+        B = mask.shape[0]
+        device = mask.device
+        ax0, ax1 = self.spatial_axes
+
+        affine = (
+            torch.eye(4, device=device, dtype=torch.float32)
+            .unsqueeze(0)
+            .expand(B, -1, -1)
+            .clone()
+        )
+
+        # Affine uses the resampling (inverse) convention:
+        # k=1: cos=0,sin=-1  k=2: cos=-1,sin=0  k=3: cos=0,sin=1
+        cos_table = [0.0, -1.0, 0.0]
+        sin_table = [-1.0, 0.0, 1.0]
+
+        for k in range(1, self.max_k + 1):
+            sel = mask & (k_values == k)
+            if sel.any():
+                c = cos_table[k - 1]
+                s = sin_table[k - 1]
+                affine[sel, ax0, ax0] = c
+                affine[sel, ax0, ax1] = -s
+                affine[sel, ax1, ax0] = s
+                affine[sel, ax1, ax1] = c
+        return affine
+
     def apply(self, tensor: torch.Tensor, params: dict) -> torch.Tensor:
         mask = params["mask"]
         k_values = params["k"]

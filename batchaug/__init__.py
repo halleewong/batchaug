@@ -1,4 +1,5 @@
 from .base import BatchDictTransform, BatchTransform
+from .compose import Compose
 from .geometric.affine import RandAffine, RandAffined
 from .geometric.flip import RandAxisFlip, RandAxisFlipd
 from .geometric.rotate90 import RandRotate90, RandRotate90d
@@ -18,6 +19,7 @@ from .intensity.smooth import RandGaussianSmooth, RandGaussianSmoothd
 __all__ = [
     "BatchTransform",
     "BatchDictTransform",
+    "Compose",
     "RandAffine",
     "RandAffined",
     "RandBiasField",

@@ -28,6 +28,29 @@ class RandAxisFlip(BatchTransform):
         params["axes"] = torch.randint(num_spatial, (batch_size,), device=device)
         return params
 
+    def to_affine(self, params: dict) -> torch.Tensor:
+        """Return (B, 4, 4) MONAI-convention affine for the flip.
+
+        Flipping spatial axis i negates coordinate i (diagonal -1).
+        Masked-out elements get identity.
+        """
+        mask = params["mask"]
+        axes = params["axes"]
+        B = mask.shape[0]
+        device = mask.device
+
+        affine = (
+            torch.eye(4, device=device, dtype=torch.float32)
+            .unsqueeze(0)
+            .expand(B, -1, -1)
+            .clone()
+        )
+        for ax in range(3):
+            sel = mask & (axes == ax)
+            if sel.any():
+                affine[sel, ax, ax] = -1.0
+        return affine
+
     def apply(self, tensor: torch.Tensor, params: dict) -> torch.Tensor:
         mask = params["mask"]
         axes = params["axes"]

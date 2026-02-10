@@ -151,6 +151,44 @@ def _sample_range(
     return result
 
 
+def monai_affine_to_theta(
+    affine: torch.Tensor,
+    spatial_shape: tuple[int, ...],
+    device: torch.device,
+) -> torch.Tensor:
+    """Convert batched MONAI affine matrices to F.affine_grid theta.
+
+    MONAI grid: coords in [-(S-1)/2, (S-1)/2] with order (dim0, dim1, dim2).
+    grid_sample: coords in [-1, 1] with order (x=last_dim, y, z=first_dim).
+    align_corners=False normalization: x_norm = x_monai * 2 / S.
+
+    Formula: theta = S_norm @ P @ affine @ P @ S_inv
+
+    Args:
+        affine: (B, 4, 4) affine matrices in MONAI convention.
+        spatial_shape: (H, W, D).
+        device: Torch device.
+
+    Returns:
+        (B, 4, 4) theta matrices for F.affine_grid.
+    """
+    H, W, D_dim = spatial_shape
+    P = torch.eye(4, device=device, dtype=torch.float32)
+    P[0, 0] = 0; P[0, 2] = 1
+    P[2, 2] = 0; P[2, 0] = 1
+
+    S_norm = torch.diag(torch.tensor(
+        [2.0 / H, 2.0 / W, 2.0 / D_dim, 1.0],
+        device=device, dtype=torch.float32,
+    ))
+    S_inv = torch.diag(torch.tensor(
+        [H / 2.0, W / 2.0, D_dim / 2.0, 1.0],
+        device=device, dtype=torch.float32,
+    ))
+
+    return S_norm @ P @ affine @ P @ S_inv
+
+
 class RandAffine(BatchTransform):
     """Random affine transformation using F.affine_grid + F.grid_sample.
 
@@ -219,33 +257,23 @@ class RandAffine(BatchTransform):
             )
             affine = affine @ _build_scale_matrices(scale)
 
-        # Convert MONAI centered-coordinate affine to F.affine_grid theta.
-        #
-        # MONAI grid: coords in [-(S-1)/2, (S-1)/2] with order (dim0, dim1, dim2).
-        # grid_sample: coords in [-1, 1] with order (x=last_dim, y, z=first_dim).
-        # align_corners=False normalization: x_norm = x_monai * 2 / S.
-        #
-        # theta = S_norm @ P @ affine @ P @ S_inv
-        # where P reverses dim order (swap 0↔2), S_norm = diag(2/H, 2/W, 2/D, 1),
-        # S_inv = diag(H/2, W/2, D/2, 1).
-        H, W, D_dim = spatial_shape
-        P = torch.eye(4, device=device, dtype=torch.float32)
-        P[0, 0] = 0; P[0, 2] = 1
-        P[2, 2] = 0; P[2, 0] = 1
-
-        S_norm = torch.diag(torch.tensor(
-            [2.0 / H, 2.0 / W, 2.0 / D_dim, 1.0],
-            device=device, dtype=torch.float32,
-        ))
-        S_inv = torch.diag(torch.tensor(
-            [H / 2.0, W / 2.0, D_dim / 2.0, 1.0],
-            device=device, dtype=torch.float32,
-        ))
-
-        params["theta"] = S_norm @ P @ affine @ P @ S_inv  # (B, 4, 4)
+        params["affine"] = affine  # raw MONAI-space affine for lazy fusion
+        params["theta"] = monai_affine_to_theta(affine, spatial_shape, device)
         params["spatial_shape"] = spatial_shape
 
         return params
+
+    def to_affine(self, params: dict) -> torch.Tensor:
+        """Return (B, 4, 4) MONAI-convention affine with identity for masked-out."""
+        affine = params["affine"]
+        mask = params["mask"]
+        B = mask.shape[0]
+        eye = (
+            torch.eye(4, device=affine.device, dtype=affine.dtype)
+            .unsqueeze(0)
+            .expand(B, -1, -1)
+        )
+        return torch.where(mask[:, None, None], affine, eye)
 
     def apply(
         self,

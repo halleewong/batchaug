@@ -31,7 +31,7 @@ All inputs have shape `(B, C, H, W, D)` where B is the batch size and C is the n
 
 ### Task Augmentation
 
-Apply the same augmentation to paired volumes and segmentations using dictionary transforms. Parameters are sampled once and applied to all keys, so paired data stays aligned.
+Apply the same augmentation to paired volumes and segmentations using dictionary transforms. Parameters are sampled once and applied to all keys, so paired data stays aligned. 
 
 ```python
 import torch
@@ -43,17 +43,18 @@ batch = {
     "seg": torch.randn(5, 4, 128, 128, 128, device="cuda"),
 }
 
-# Compose a pipeline (planned API)
+# Compose a pipeline
 task_augs = batchaug.Compose(
-    lazy=True,
     transforms=[
         batchaug.RandRotate90d(keys=["vol", "seg"], prob=0.15, max_k=3, spatial_axes=(0, 1)),
         batchaug.RandAxisFlipd(keys=["vol", "seg"], prob=0.15),
         batchaug.RandGaussianNoised(keys=["vol"], prob=0.15, mean=0.0, std=0.5),
-        batchaug.RandAffined(keys=["vol", "seg"], prob=0.15, mode=["bilinear", "nearest"],
+        batchaug.RandAffined(keys=["vol", "seg"], prob=0.15,
                              rotate_range=0.785, shear_range=0.3, translate_range=5),
         batchaug.ScaleIntensityd(keys=["vol"]),
-    ]
+    ],
+    lazy=True,
+    mode={"vol": "bilinear", "seg": "nearest"},
 )
 
 augmented_batch = task_augs(batch)
@@ -72,6 +73,16 @@ for i in range(bs):
     augmented_segs.append(aug_sample["seg"])
 x_tensors = torch.stack(augmented_vols, dim=0)
 y_tensors = torch.stack(augmented_segs, dim=0)
+```
+
+The same parameters are used for each channel within a batch element. To perform data augmentation independently accross channels, simply reshape the data to merge the B and C dimensions, apply the augmentation, then reshape back:
+
+```python
+# For independent channel augmentation, merge B and C dims
+B, C = vol.shape[:2]
+vol = vol.view(B * C, 1, *vol.shape[2:])  # (B*C, 1, H, W, D)
+aug_vol = t(vol)
+aug_vol = aug_vol.view(B, C, *aug_vol.shape[2:])
 ```
 
 ### Data Augmentation
@@ -95,20 +106,29 @@ noisy_vol = t.apply(vol, params)
 
 ### Available Transforms
 
+**Composition**
+
+| Transform | Description |
+|-----------|-------------|
+| `Compose` | Sequential pipeline with optional lazy geometric fusion |
+
+**Geometric**
+
+| Transform | Dict version | Description |
+|-----------|-------------|-------------|
+| `RandAxisFlip` | `RandAxisFlipd` | Random flip along a spatial axis |
+| `RandRotate90` | `RandRotate90d` | Random 90-degree rotation |
+| `RandAffine` | `RandAffined` | Random affine (rotate, shear, translate, scale) with per-key interpolation modes |
+
+**Intensity**
+
 | Transform | Dict version | Description |
 |-----------|-------------|-------------|
 | `ScaleIntensity` | `ScaleIntensityd` | Rescale intensity to [minv, maxv], per element or per element x channel |
-| `RandAxisFlip` | `RandAxisFlipd` | Random flip along a spatial axis |
-| `RandRotate90` | `RandRotate90d` | Random 90-degree rotation |
 | `RandGaussianNoise` | `RandGaussianNoised` | Additive Gaussian noise with per-element mean/std |
-
-### Planned Transforms
-
-- `RandAdjustContrast` / `RandAdjustContrastd` — Gamma correction
-- `RandGaussianSmooth` / `RandGaussianSmoothd` — Separable Gaussian blur
-- `RandGaussianSharpen` / `RandGaussianSharpend` — Unsharp masking
-- `RandSimulateLowResolution` / `RandSimulateLowResolutiond` — Downsample/upsample
-- `RandBiasField` / `RandBiasFieldd` — Polynomial bias field
-- `RandGibbsNoise` / `RandGibbsNoised` — FFT-based Gibbs ringing
-- `RandAffine` / `RandAffined` — Batched affine with per-key interpolation modes
-- `Compose` — Sequential + lazy geometric fusion
+| `RandAdjustContrast` | `RandAdjustContrastd` | Gamma correction |
+| `RandGaussianSmooth` | `RandGaussianSmoothd` | Separable Gaussian blur |
+| `RandGaussianSharpen` | `RandGaussianSharpend` | Unsharp masking |
+| `RandSimulateLowResolution` | `RandSimulateLowResolutiond` | Downsample/upsample simulation |
+| `RandBiasField` | `RandBiasFieldd` | Polynomial bias field |
+| `RandGibbsNoise` | `RandGibbsNoised` | FFT-based Gibbs ringing |

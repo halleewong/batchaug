@@ -277,7 +277,7 @@ def bench_one_rand_affine(B, C, S, repeats):
 # ---------------------------------------------------------------------------
 
 BENCHMARKS = {
-    "ScaleIntensityd (per element×channel) [vol]": bench_one_scale_intensity_cw,
+    "ScaleIntensityd (per element x channel) [vol]": bench_one_scale_intensity_cw,
     "ScaleIntensityd (per element, all channels) [vol]": bench_one_scale_intensity_global,
     "RandAxisFlipd [vol+seg]": bench_one_rand_axis_flip,
     "RandRotate90d [vol+seg]": bench_one_rand_rotate90,
