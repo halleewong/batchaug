@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "batchaug"
+version = "0.1.0"
+description = "Batched GPU augmentations for paired 3D medical imaging data"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+    "monai>=1.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["batchaug*"]

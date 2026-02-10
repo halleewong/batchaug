@@ -1,0 +1,87 @@
+_class: monai.transforms.Compose
+lazy: true
+transforms:
+- _class: monai.transforms.RandRotate90d
+    keys:
+    - vol
+    - seg
+    prob: 0.15
+    max_k: 3
+    spatial_axes:
+    - 0
+    - 1
+- _class: monai.transforms.RandAxisFlipd
+    keys:
+    - vol
+    - seg
+    prob: 0.15
+- _class: monai.transforms.RandSimulateLowResolutiond
+    keys:
+    - vol
+    prob: 0.15
+    zoom_range:
+    - 0.33
+    - 1.0
+- _class: monai.transforms.RandGaussianNoised
+    keys:
+    - vol
+    prob: 0.15
+    mean: 0.0
+    std: 0.5
+- _class: monai.transforms.RandBiasFieldd
+    keys:
+    - vol
+    prob: 0.15
+    coeff_range:
+    - 0.0
+    - 0.05
+- _class: monai.transforms.RandGibbsNoised
+    keys:
+    - vol
+    prob: 0.15
+    alpha:
+    - 0.0
+    - 0.33
+- _class: monai.transforms.RandAdjustContrastd
+    keys:
+    - vol
+    prob: 0.15
+    gamma:
+    - 0.5
+    - 2.5
+- _class: monai.transforms.RandGaussianSmoothd
+    keys:
+    - vol
+    prob: 0.15
+    sigma_x:
+    - 0.0
+    - 0.1
+    sigma_y:
+    - 0.0
+    - 0.1
+    sigma_z:
+    - 0.0
+    - 0.1
+- _class: monai.transforms.RandGaussianSharpend
+    keys:
+    - vol
+    prob: 0.15
+- _class: monai.transforms.RandAffined
+    keys:
+    - vol
+    - seg
+    prob: 0.15
+    mode:
+    - bilinear
+    - nearest
+    rotate_range: 0.7853981633974483
+    shear_range: 0.3
+    translate_range: 5
+- _class: monai.transforms.ScaleIntensityd
+    keys:
+    - vol
+- _class: monai.transforms.ToTensord
+    keys:
+    - vol
+    - seg
+    track_meta: false
