@@ -4,7 +4,7 @@ Measures the peak memory *allocated* during a single forward pass
 (excluding the input tensors themselves).
 
 Usage:
-    conda run -n interseg3d python examples/benchmark_memory.py
+    conda run -n interseg3d python examples/benchmark_memory.py 2>&1 | tee benchmark_memory.log
     conda run -n interseg3d python examples/benchmark_memory.py --batch_size 4
     conda run -n interseg3d python examples/benchmark_memory.py --spatial_sizes 64 128 --channels 1 4
 """
@@ -254,20 +254,93 @@ def bench_one_rand_simulate_low_resolution(B, C, S):
     return monai_mb, ba_mb, in_mb
 
 
+def bench_one_rand_bias_field(B, C, S):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    batch = {"vol": vol}
+    in_mb = input_size_mb(B, C, S, n_tensors=1)
+
+    ba_t = batchaug.RandBiasFieldd(keys=["vol"], prob=1.0, degree=3, coeff_range=(0.0, 0.1))
+    ba_t(batch)
+    ba_mb = measure_peak_mb(lambda: ba_t(batch))
+
+    monai_t = monai.transforms.RandBiasFieldd(keys=["vol"], prob=1.0, degree=3, coeff_range=(0.0, 0.1))
+    monai_per_sample_loop(monai_t, batch, ["vol"])
+    monai_mb = measure_peak_mb(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol"])
+    )
+
+    del vol, batch
+    torch.cuda.empty_cache()
+    return monai_mb, ba_mb, in_mb
+
+
+def bench_one_rand_gibbs_noise(B, C, S):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    batch = {"vol": vol}
+    in_mb = input_size_mb(B, C, S, n_tensors=1)
+
+    ba_t = batchaug.RandGibbsNoised(keys=["vol"], prob=1.0, alpha=(0.0, 1.0))
+    ba_t(batch)
+    ba_mb = measure_peak_mb(lambda: ba_t(batch))
+
+    monai_t = monai.transforms.RandGibbsNoised(keys=["vol"], prob=1.0, alpha=(0.0, 1.0))
+    monai_per_sample_loop(monai_t, batch, ["vol"])
+    monai_mb = measure_peak_mb(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol"])
+    )
+
+    del vol, batch
+    torch.cuda.empty_cache()
+    return monai_mb, ba_mb, in_mb
+
+
+def bench_one_rand_affine(B, C, S):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    seg = torch.randint(0, 5, (B, C, S, S, S), device="cuda").float()
+    batch = {"vol": vol, "seg": seg}
+    in_mb = input_size_mb(B, C, S, n_tensors=2)
+
+    ba_t = batchaug.RandAffined(
+        keys=["vol", "seg"], prob=1.0,
+        rotate_range=0.3, scale_range=0.2,
+        mode={"vol": "bilinear", "seg": "nearest"},
+    )
+    ba_t(batch)
+    ba_mb = measure_peak_mb(lambda: ba_t(batch))
+
+    monai_t = monai.transforms.RandAffined(
+        keys=["vol", "seg"], prob=1.0,
+        rotate_range=0.3, scale_range=0.2,
+        mode=("bilinear", "nearest"),
+        padding_mode="zeros",
+    )
+    monai_per_sample_loop(monai_t, batch, ["vol", "seg"])
+    monai_mb = measure_peak_mb(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol", "seg"])
+    )
+
+    del vol, seg, batch
+    torch.cuda.empty_cache()
+    return monai_mb, ba_mb, in_mb
+
+
 # ---------------------------------------------------------------------------
 # Table printing
 # ---------------------------------------------------------------------------
 
 BENCHMARKS = {
-    "ScaleIntensityd (per element×channel)": bench_one_scale_intensity_cw,
-    "ScaleIntensityd (per element, all channels)": bench_one_scale_intensity_global,
-    "RandAxisFlipd": bench_one_rand_axis_flip,
-    "RandRotate90d": bench_one_rand_rotate90,
-    "RandGaussianNoised": bench_one_rand_gaussian_noise,
-    "RandAdjustContrastd": bench_one_rand_adjust_contrast,
-    "RandGaussianSmoothd": bench_one_rand_gaussian_smooth,
-    "RandGaussianSharpend": bench_one_rand_gaussian_sharpen,
-    "RandSimulateLowResolutiond": bench_one_rand_simulate_low_resolution,
+    "ScaleIntensityd (per element×channel) [vol]": bench_one_scale_intensity_cw,
+    "ScaleIntensityd (per element, all channels) [vol]": bench_one_scale_intensity_global,
+    "RandAxisFlipd [vol+seg]": bench_one_rand_axis_flip,
+    "RandRotate90d [vol+seg]": bench_one_rand_rotate90,
+    "RandGaussianNoised [vol]": bench_one_rand_gaussian_noise,
+    "RandAdjustContrastd [vol]": bench_one_rand_adjust_contrast,
+    "RandGaussianSmoothd [vol]": bench_one_rand_gaussian_smooth,
+    "RandGaussianSharpend [vol]": bench_one_rand_gaussian_sharpen,
+    "RandSimulateLowResolutiond [vol]": bench_one_rand_simulate_low_resolution,
+    "RandBiasFieldd [vol]": bench_one_rand_bias_field,
+    "RandGibbsNoised [vol]": bench_one_rand_gibbs_noise,
+    "RandAffined [vol+seg]": bench_one_rand_affine,
 }
 
 
