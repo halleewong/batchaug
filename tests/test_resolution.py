@@ -82,6 +82,38 @@ class TestRandSimulateLowResolutionChannelConsistency:
                 assert torch.allclose(result[b, 0], result[b, c], atol=1e-6)
 
 
+class TestRandSimulateLowResolutionNonCubic:
+    """Non-cubic spatial shapes (H != W != D)."""
+
+    def test_matches_monai_nonsquare(self, device):
+        """Low-res simulation matches MONAI on non-cubic (1, 12, 16, 20)."""
+        zoom = 0.7
+        torch.manual_seed(0)
+        input_4d = torch.rand(1, 12, 16, 20, device=device)
+        input_5d = input_4d.unsqueeze(0)
+
+        monai_t = monai.transforms.RandSimulateLowResolution(
+            prob=1.0, zoom_range=(zoom, zoom)
+        )
+        monai_out = monai_t(input_4d)
+
+        ba_t = batchaug.RandSimulateLowResolution(
+            prob=1.0, zoom_range=(zoom, zoom)
+        )
+        ba_out = ba_t(input_5d)
+
+        assert ba_out.shape == input_5d.shape
+        assert torch.allclose(
+            ba_out[0], torch.as_tensor(monai_out), atol=1e-5
+        )
+
+    def test_nonsquare_preserves_shape(self, vol_nonsquare, device):
+        t = batchaug.RandSimulateLowResolution(prob=1.0, zoom_range=(0.5, 0.9))
+        result = t(vol_nonsquare)
+        assert result.shape == vol_nonsquare.shape
+        assert not torch.isnan(result).any()
+
+
 class TestRandSimulateLowResolutionBfloat16:
     """Transform works with bfloat16."""
 

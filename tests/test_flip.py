@@ -106,6 +106,36 @@ class TestRandAxisFlipChannelConsistency:
                 assert result[b, c, 0, 0, 0].item() == 0.0
 
 
+class TestRandAxisFlipNonCubic:
+    """Non-cubic spatial shapes (H != W != D)."""
+
+    @pytest.mark.parametrize("axis", [0, 1, 2])
+    def test_matches_monai_nonsquare(self, device, axis):
+        """Flip on each axis matches MONAI for non-cubic (1, 12, 16, 20)."""
+        torch.manual_seed(0)
+        input_4d = torch.rand(1, 12, 16, 20, device=device)
+        input_5d = input_4d.unsqueeze(0)
+
+        monai_t = monai.transforms.Flip(spatial_axis=axis)
+        monai_out = monai_t(input_4d)
+
+        ba_t = batchaug.RandAxisFlip(prob=1.0)
+        params = {
+            "mask": torch.tensor([True], device=device),
+            "axes": torch.tensor([axis], device=device),
+        }
+        ba_out = ba_t.apply(input_5d, params)
+
+        assert ba_out.shape == input_5d.shape
+        assert torch.allclose(ba_out[0], monai_out, atol=1e-6)
+
+    def test_nonsquare_preserves_shape(self, vol_nonsquare, device):
+        t = batchaug.RandAxisFlip(prob=1.0)
+        result = t(vol_nonsquare)
+        assert result.shape == vol_nonsquare.shape
+        assert not torch.isnan(result).any()
+
+
 class TestRandAxisFlipBfloat16:
     """Transform works with bfloat16."""
 

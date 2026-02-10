@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import torch
+import torch.nn.functional as F
 
 from ..base import BatchDictTransform, BatchTransform
+from .affine import monai_affine_to_theta
 
 
 class RandRotate90(BatchTransform):
@@ -76,14 +78,38 @@ class RandRotate90(BatchTransform):
         # Map spatial axes to tensor dims: spatial 0 -> tensor dim 2, etc.
         tensor_axes = [a + 2 for a in self.spatial_axes]
 
-        result = tensor.clone()
-        for k in range(1, self.max_k + 1):
-            batch_mask = mask & (k_values == k)
-            if batch_mask.any():
-                result[batch_mask] = torch.rot90(
-                    result[batch_mask], k, tensor_axes
-                )
-        return result
+        # Check if rotation plane is square
+        dim0 = tensor.shape[tensor_axes[0]]
+        dim1 = tensor.shape[tensor_axes[1]]
+
+        if dim0 == dim1:
+            # Fast path: rot90 preserves shape for square planes
+            result = tensor.clone()
+            for k in range(1, self.max_k + 1):
+                batch_mask = mask & (k_values == k)
+                if batch_mask.any():
+                    result[batch_mask] = torch.rot90(
+                        result[batch_mask], k, tensor_axes
+                    )
+            return result
+
+        # Non-square plane: rot90 would change shape, so fall back to
+        # affine_grid + grid_sample (consistent with Compose lazy fusion).
+        # 90-degree rotations map to exact voxel centers, so bilinear
+        # gives exact values within the valid region.
+        affine = self.to_affine(params)
+        spatial_shape = tensor.shape[2:]
+        theta = monai_affine_to_theta(affine, spatial_shape, tensor.device)
+        theta_34 = theta[:, :3, :]
+
+        grid = F.affine_grid(theta_34, list(tensor.shape), align_corners=False)
+        result = F.grid_sample(
+            tensor.float(), grid,
+            mode="bilinear", padding_mode="zeros", align_corners=False,
+        ).to(tensor.dtype)
+
+        mask_5d = mask[:, None, None, None, None]
+        return torch.where(mask_5d, result, tensor)
 
 
 class RandRotate90d(BatchDictTransform):

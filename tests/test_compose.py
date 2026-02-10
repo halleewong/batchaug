@@ -344,6 +344,66 @@ class TestComposeEdgeCases:
 
 
 # -----------------------------------------------------------------------
+# Non-cubic spatial shapes
+# -----------------------------------------------------------------------
+
+
+class TestComposeNonCubic:
+    """Non-cubic spatial shapes (H != W != D)."""
+
+    def test_eager_nonsquare(self, vol_nonsquare, seg_nonsquare, device):
+        """Eager compose on non-cubic data preserves shapes."""
+        transforms = [
+            batchaug.RandAxisFlipd(keys=["vol", "seg"], prob=1.0),
+            batchaug.RandRotate90d(keys=["vol", "seg"], prob=1.0),
+            batchaug.RandGaussianNoised(keys=["vol"], prob=1.0, mean=0.0, std=0.1),
+        ]
+        compose = batchaug.Compose(transforms, lazy=False)
+        result = compose({"vol": vol_nonsquare.clone(), "seg": seg_nonsquare.clone()})
+        assert result["vol"].shape == vol_nonsquare.shape
+        assert result["seg"].shape == seg_nonsquare.shape
+        assert not torch.isnan(result["vol"]).any()
+
+    def test_lazy_nonsquare(self, vol_nonsquare, seg_nonsquare, device):
+        """Lazy compose on non-cubic data preserves shapes."""
+        transforms = [
+            batchaug.RandAxisFlipd(keys=["vol", "seg"], prob=1.0),
+            batchaug.RandRotate90d(keys=["vol", "seg"], prob=1.0),
+            batchaug.RandAffined(
+                keys=["vol", "seg"], prob=1.0,
+                rotate_range=0.3, scale_range=0.1,
+            ),
+        ]
+        compose = batchaug.Compose(
+            transforms, lazy=True,
+            mode={"vol": "bilinear", "seg": "nearest"},
+        )
+        result = compose({"vol": vol_nonsquare.clone(), "seg": seg_nonsquare.clone()})
+        assert result["vol"].shape == vol_nonsquare.shape
+        assert result["seg"].shape == seg_nonsquare.shape
+        assert not torch.isnan(result["vol"]).any()
+
+    def test_lazy_seg_nearest_nonsquare(self, vol_nonsquare, seg_nonsquare, device):
+        """Seg with nearest mode preserves label set on non-cubic data."""
+        transforms = [
+            batchaug.RandAxisFlipd(keys=["vol", "seg"], prob=1.0),
+            batchaug.RandAffined(
+                keys=["vol", "seg"], prob=1.0,
+                rotate_range=0.2,
+            ),
+        ]
+        compose = batchaug.Compose(
+            transforms, lazy=True,
+            mode={"vol": "bilinear", "seg": "nearest"},
+            padding_mode="zeros",
+        )
+        result = compose({"vol": vol_nonsquare.clone(), "seg": seg_nonsquare.clone()})
+        unique = result["seg"].unique()
+        expected = {0.0, 1.0, 2.0, 3.0, 4.0}
+        assert all(v.item() in expected for v in unique)
+
+
+# -----------------------------------------------------------------------
 # bfloat16
 # -----------------------------------------------------------------------
 

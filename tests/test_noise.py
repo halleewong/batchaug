@@ -126,6 +126,32 @@ class TestRandGaussianNoiseChannelConsistency:
                 assert abs(s - mean_std) / mean_std < 0.15
 
 
+class TestRandGaussianNoiseNonCubic:
+    """Non-cubic spatial shapes (H != W != D)."""
+
+    def test_nonsquare_preserves_shape(self, vol_nonsquare, device):
+        t = batchaug.RandGaussianNoise(prob=1.0, std=0.1)
+        result = t(vol_nonsquare)
+        assert result.shape == vol_nonsquare.shape
+        assert not torch.isnan(result).any()
+
+    def test_nonsquare_additive(self, device):
+        """Output = input + noise on non-cubic data."""
+        torch.manual_seed(0)
+        input_5d = torch.rand(1, 1, 12, 16, 20, device=device)
+        noise = torch.randn(1, 1, 12, 16, 20, device=device) * 0.3
+
+        ba_t = batchaug.RandGaussianNoise(prob=1.0, std=0.3)
+        params = {
+            "mask": torch.tensor([True], device=device),
+            "std": torch.tensor([0.3], device=device),
+            "mean": torch.tensor([0.0], device=device),
+            "noise": noise,
+        }
+        ba_out = ba_t.apply(input_5d, params)
+        assert torch.allclose(ba_out, input_5d + noise, atol=1e-6)
+
+
 class TestRandGaussianNoiseBfloat16:
     """Transform works with bfloat16."""
 

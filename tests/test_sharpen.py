@@ -92,6 +92,45 @@ class TestRandGaussianSharpenSigma2DependsOnSigma1:
         assert (params["sigma2_x"] <= 0.6 + 1e-6).all()
 
 
+class TestRandGaussianSharpenNonCubic:
+    """Non-cubic spatial shapes (H != W != D)."""
+
+    def test_matches_monai_nonsquare(self, device):
+        """Unsharp mask matches MONAI on non-cubic (1, 12, 16, 20)."""
+        sigma1 = (0.8, 0.7, 0.9)
+        sigma2 = (0.5, 0.4, 0.6)
+        alpha = 15.0
+        torch.manual_seed(0)
+        input_4d = torch.rand(1, 12, 16, 20, device=device)
+        input_5d = input_4d.unsqueeze(0)
+
+        monai_t = monai.transforms.GaussianSharpen(
+            sigma1=sigma1, sigma2=sigma2, alpha=alpha
+        )
+        monai_out = monai_t(input_4d)
+
+        ba_t = batchaug.RandGaussianSharpen(
+            prob=1.0,
+            sigma1_x=(sigma1[0], sigma1[0]),
+            sigma1_y=(sigma1[1], sigma1[1]),
+            sigma1_z=(sigma1[2], sigma1[2]),
+            sigma2_x=(sigma2[0], sigma2[0]),
+            sigma2_y=(sigma2[1], sigma2[1]),
+            sigma2_z=(sigma2[2], sigma2[2]),
+            alpha=(alpha, alpha),
+        )
+        ba_out = ba_t(input_5d)
+
+        assert ba_out.shape == input_5d.shape
+        assert torch.allclose(ba_out[0], monai_out, atol=1e-3)
+
+    def test_nonsquare_preserves_shape(self, vol_nonsquare, device):
+        t = batchaug.RandGaussianSharpen(prob=1.0)
+        result = t(vol_nonsquare)
+        assert result.shape == vol_nonsquare.shape
+        assert not torch.isnan(result).any()
+
+
 class TestRandGaussianSharpenBfloat16:
     """Transform works with bfloat16."""
 

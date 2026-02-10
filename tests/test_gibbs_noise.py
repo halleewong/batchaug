@@ -83,6 +83,34 @@ class TestRandGibbsNoiseAlphaMonotonicity:
         assert diff_high > diff_low
 
 
+class TestRandGibbsNoiseNonCubic:
+    """Non-cubic spatial shapes (H != W != D)."""
+
+    def test_matches_monai_nonsquare(self, device):
+        """Gibbs noise matches MONAI on non-cubic (1, 12, 16, 20)."""
+        alpha = 0.5
+        torch.manual_seed(0)
+        input_4d = torch.rand(1, 12, 16, 20, device=device)
+        input_5d = input_4d.unsqueeze(0)
+
+        monai_t = monai.transforms.GibbsNoise(alpha=alpha)
+        monai_out = monai_t(input_4d)
+
+        ba_t = batchaug.RandGibbsNoise(prob=1.0, alpha=(alpha, alpha))
+        ba_out = ba_t(input_5d)
+
+        assert ba_out.shape == input_5d.shape
+        assert torch.allclose(ba_out[0], monai_out, atol=1e-5), (
+            f"max diff: {(ba_out[0] - monai_out).abs().max().item()}"
+        )
+
+    def test_nonsquare_preserves_shape(self, vol_nonsquare, device):
+        t = batchaug.RandGibbsNoise(prob=1.0, alpha=(0.3, 0.7))
+        result = t(vol_nonsquare)
+        assert result.shape == vol_nonsquare.shape
+        assert not torch.isnan(result).any()
+
+
 class TestRandGibbsNoiseBfloat16:
     """Transform works with bfloat16."""
 

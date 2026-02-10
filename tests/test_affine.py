@@ -7,6 +7,7 @@ from batchaug.geometric.affine import (
     _build_scale_matrices,
     _build_shear_matrices,
     _build_translation_matrices,
+    monai_affine_to_theta,
 )
 
 
@@ -50,27 +51,13 @@ class TestRandAffineMatchesMONAI:
             scale = torch.tensor([scale_params], device=device, dtype=torch.float32)
             affine = affine @ _build_scale_matrices(scale)
 
-        # Convert to grid_sample theta using the same formula as RandAffine
         spatial_shape = input_5d.shape[2:]
-        H, W, D_dim = spatial_shape
-
-        P = torch.eye(4, device=device, dtype=torch.float32)
-        P[0, 0] = 0; P[0, 2] = 1
-        P[2, 2] = 0; P[2, 0] = 1
-
-        S_norm = torch.diag(torch.tensor(
-            [2.0 / H, 2.0 / W, 2.0 / D_dim, 1.0],
-            device=device, dtype=torch.float32,
-        ))
-        S_inv = torch.diag(torch.tensor(
-            [H / 2.0, W / 2.0, D_dim / 2.0, 1.0],
-            device=device, dtype=torch.float32,
-        ))
 
         ba_t = batchaug.RandAffine(prob=1.0, padding_mode="zeros", mode="bilinear")
         params = ba_t.sample_params(1, input_5d.shape, device)
         params["mask"] = torch.tensor([True], device=device)
-        params["theta"] = S_norm @ P @ affine @ P @ S_inv
+        params["affine"] = affine
+        params["theta"] = monai_affine_to_theta(affine, spatial_shape, device)
 
         ba_out = ba_t.apply(input_5d, params)
         return ba_out[0], monai_out
@@ -145,6 +132,92 @@ class TestRandAffinedPerKeyModes:
         unique_vals = result["seg"].unique()
         expected = {0.0, 1.0, 2.0, 3.0, 4.0}
         assert all(v.item() in expected for v in unique_vals)
+
+
+class TestRandAffineNonCubic:
+    """Non-cubic spatial shapes (H != W != D) match MONAI."""
+
+    def _compare_monai_nonsquare(self, device, **kwargs):
+        """Run MONAI and batchaug on (1, 1, 12, 16, 20) and compare."""
+        torch.manual_seed(0)
+        input_4d = torch.rand(1, 12, 16, 20, device=device)
+        input_5d = input_4d.unsqueeze(0)
+
+        monai_t = monai.transforms.RandAffine(
+            prob=1.0,
+            padding_mode="zeros",
+            mode="bilinear",
+            **kwargs,
+        )
+        monai_t.randomize()
+
+        rand_grid = monai_t.rand_affine_grid
+        rotate_params = rand_grid.rotate_params
+        shear_params = rand_grid.shear_params
+        translate_params = rand_grid.translate_params
+        scale_params = rand_grid.scale_params
+
+        monai_out = monai_t(input_4d, randomize=False)
+
+        affine = torch.eye(4, device=device, dtype=torch.float32).unsqueeze(0)
+        if rotate_params:
+            angles = torch.tensor([rotate_params], device=device, dtype=torch.float32)
+            affine = affine @ _build_rotation_matrices(angles)
+        if shear_params:
+            shear = torch.tensor([shear_params], device=device, dtype=torch.float32)
+            affine = affine @ _build_shear_matrices(shear)
+        if translate_params:
+            shift = torch.tensor([translate_params], device=device, dtype=torch.float32)
+            affine = affine @ _build_translation_matrices(shift)
+        if scale_params:
+            scale = torch.tensor([scale_params], device=device, dtype=torch.float32)
+            affine = affine @ _build_scale_matrices(scale)
+
+        spatial_shape = input_5d.shape[2:]
+
+        ba_t = batchaug.RandAffine(prob=1.0, padding_mode="zeros", mode="bilinear")
+        params = ba_t.sample_params(1, input_5d.shape, device)
+        params["mask"] = torch.tensor([True], device=device)
+        params["affine"] = affine
+        params["theta"] = monai_affine_to_theta(affine, spatial_shape, device)
+
+        ba_out = ba_t.apply(input_5d, params)
+        return ba_out[0], monai_out
+
+    def test_translate_nonsquare(self, device):
+        ba_out, monai_out = self._compare_monai_nonsquare(
+            device, translate_range=(2.0, 2.0, 2.0),
+        )
+        assert torch.allclose(ba_out, monai_out, atol=1e-4), (
+            f"max diff: {(ba_out - monai_out).abs().max().item()}"
+        )
+
+    def test_rotate_nonsquare(self, device):
+        ba_out, monai_out = self._compare_monai_nonsquare(
+            device, rotate_range=(0.3, 0.3, 0.3),
+        )
+        assert torch.allclose(ba_out, monai_out, atol=1e-4), (
+            f"max diff: {(ba_out - monai_out).abs().max().item()}"
+        )
+
+    def test_scale_nonsquare(self, device):
+        ba_out, monai_out = self._compare_monai_nonsquare(
+            device, scale_range=(0.2, 0.2, 0.2),
+        )
+        assert torch.allclose(ba_out, monai_out, atol=1e-4), (
+            f"max diff: {(ba_out - monai_out).abs().max().item()}"
+        )
+
+    def test_combined_nonsquare(self, device):
+        ba_out, monai_out = self._compare_monai_nonsquare(
+            device,
+            rotate_range=(0.2, 0.2, 0.2),
+            scale_range=(0.1, 0.1, 0.1),
+            translate_range=(1.0, 1.0, 1.0),
+        )
+        assert torch.allclose(ba_out, monai_out, atol=1e-4), (
+            f"max diff: {(ba_out - monai_out).abs().max().item()}"
+        )
 
 
 class TestRandAffineBfloat16:

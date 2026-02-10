@@ -134,6 +134,61 @@ class TestRandRotate90ChannelConsistency:
                 assert torch.equal(positions[0], positions[c])
 
 
+class TestRandRotate90NonSquare:
+    """Non-square spatial planes use grid_sample fallback."""
+
+    def test_k2_matches_monai_nonsquare(self, device):
+        """k=2 (180 deg) preserves shape even with non-square dims.
+        Compare against MONAI at B=1."""
+        torch.manual_seed(0)
+        input_4d = torch.rand(1, 12, 16, 20, device=device)
+        input_5d = input_4d.unsqueeze(0)
+
+        monai_t = monai.transforms.Rotate90(k=2, spatial_axes=(0, 1))
+        monai_out = monai_t(input_4d)
+
+        ba_t = batchaug.RandRotate90(prob=1.0, max_k=3, spatial_axes=(0, 1))
+        params = {
+            "mask": torch.tensor([True], device=device),
+            "k": torch.tensor([2], device=device),
+        }
+        ba_out = ba_t.apply(input_5d, params)
+
+        # k=2 is 180 degrees — shape doesn't change, output should match MONAI
+        assert ba_out.shape == input_5d.shape
+        assert torch.allclose(ba_out[0], monai_out, atol=1e-4), (
+            f"max diff: {(ba_out[0] - monai_out).abs().max().item()}"
+        )
+
+    @pytest.mark.parametrize("spatial_axes", [(0, 1), (0, 2), (1, 2)])
+    def test_nonsquare_preserves_shape(self, vol_nonsquare, device, spatial_axes):
+        """Output shape matches input shape for non-square spatial planes."""
+        t = batchaug.RandRotate90(prob=1.0, max_k=3, spatial_axes=spatial_axes)
+        result = t(vol_nonsquare)
+        assert result.shape == vol_nonsquare.shape
+
+    def test_nonsquare_mask_false_noop(self, vol_nonsquare, device):
+        """mask=False preserves input exactly for non-square data."""
+        t = batchaug.RandRotate90(prob=1.0, max_k=3, spatial_axes=(0, 1))
+        params = {
+            "mask": torch.tensor([False, False], device=device),
+            "k": torch.tensor([1, 3], device=device),
+        }
+        result = t.apply(vol_nonsquare, params)
+        assert torch.equal(result, vol_nonsquare)
+
+    def test_nonsquare_seg_stays_integer(self, seg_nonsquare, device):
+        """Segmentation labels should remain near-integer after non-square rot90."""
+        t = batchaug.RandRotate90(prob=1.0, max_k=3, spatial_axes=(0, 1))
+        params = {
+            "mask": torch.ones(2, dtype=torch.bool, device=device),
+            "k": torch.tensor([1, 3], device=device),
+        }
+        result = t.apply(seg_nonsquare, params)
+        deviation = (result - result.round()).abs().max().item()
+        assert deviation < 1e-3, f"max deviation from int: {deviation}"
+
+
 class TestRandRotate90Bfloat16:
     """Transform works with bfloat16."""
 

@@ -220,6 +220,55 @@ class TestFullPipelineLazyVsEager:
 
 
 # -----------------------------------------------------------------------
+# Non-cubic spatial shapes
+# -----------------------------------------------------------------------
+
+
+class TestFullPipelineNonCubic:
+    """Full pipeline on non-cubic (H != W != D) data."""
+
+    def test_output_shapes(self, vol_nonsquare, seg_nonsquare, device):
+        for lazy in (False, True):
+            pipe = _make_pipeline(lazy=lazy)
+            result = pipe({
+                "vol": vol_nonsquare.clone(),
+                "seg": seg_nonsquare.clone(),
+            })
+            assert result["vol"].shape == vol_nonsquare.shape, f"lazy={lazy}"
+            assert result["seg"].shape == seg_nonsquare.shape, f"lazy={lazy}"
+
+    def test_vol_finite(self, vol_nonsquare, seg_nonsquare, device):
+        for lazy in (False, True):
+            pipe = _make_pipeline(lazy=lazy)
+            for seed in range(3):
+                torch.manual_seed(seed)
+                result = pipe({
+                    "vol": vol_nonsquare.clone(),
+                    "seg": seg_nonsquare.clone(),
+                })
+                assert not torch.isnan(result["vol"]).any(), (
+                    f"lazy={lazy}, seed={seed}"
+                )
+                assert not torch.isinf(result["vol"]).any(), (
+                    f"lazy={lazy}, seed={seed}"
+                )
+
+    def test_seg_values_nearest(self, vol_nonsquare, seg_nonsquare, device):
+        pipe = _make_pipeline(lazy=True)
+        for seed in range(3):
+            torch.manual_seed(seed)
+            result = pipe({
+                "vol": vol_nonsquare.clone(),
+                "seg": seg_nonsquare.clone(),
+            })
+            unique = result["seg"].unique()
+            expected = {0.0, 1.0, 2.0, 3.0, 4.0}
+            assert all(v.item() in expected for v in unique), (
+                f"seed={seed}, unexpected seg values: {unique.tolist()}"
+            )
+
+
+# -----------------------------------------------------------------------
 # bfloat16
 # -----------------------------------------------------------------------
 

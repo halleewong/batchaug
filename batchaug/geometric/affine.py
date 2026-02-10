@@ -158,11 +158,16 @@ def monai_affine_to_theta(
 ) -> torch.Tensor:
     """Convert batched MONAI affine matrices to F.affine_grid theta.
 
-    MONAI grid: coords in [-(S-1)/2, (S-1)/2] with order (dim0, dim1, dim2).
+    MONAI grid: coords in centered integer space with order (dim0, dim1, dim2).
     grid_sample: coords in [-1, 1] with order (x=last_dim, y, z=first_dim).
-    align_corners=False normalization: x_norm = x_monai * 2 / S.
+    align_corners=False normalization: g = m * 2 / N.
 
-    Formula: theta = S_norm @ P @ affine @ P @ S_inv
+    Derivation:
+        g_out (grid_sample) → P permute to MONAI order → S_inv scale to
+        MONAI centered → affine → S_norm scale back to [-1,1] →
+        P permute back to grid_sample order.
+
+    Formula: theta = P @ S_norm @ affine @ S_inv @ P
 
     Args:
         affine: (B, 4, 4) affine matrices in MONAI convention.
@@ -173,6 +178,7 @@ def monai_affine_to_theta(
         (B, 4, 4) theta matrices for F.affine_grid.
     """
     H, W, D_dim = spatial_shape
+    # P swaps axis 0 (x=D in grid_sample) with axis 2 (z=H in grid_sample)
     P = torch.eye(4, device=device, dtype=torch.float32)
     P[0, 0] = 0; P[0, 2] = 1
     P[2, 2] = 0; P[2, 0] = 1
@@ -186,7 +192,7 @@ def monai_affine_to_theta(
         device=device, dtype=torch.float32,
     ))
 
-    return S_norm @ P @ affine @ P @ S_inv
+    return P @ S_norm @ affine @ S_inv @ P
 
 
 class RandAffine(BatchTransform):
