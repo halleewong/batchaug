@@ -2,7 +2,7 @@ import torch
 import monai.transforms
 
 import batchaug
-from batchaug.geometric.affine import (
+from batchaug.pytorch.geometric.affine import (
     _build_rotation_matrices,
     _build_scale_matrices,
     _build_shear_matrices,

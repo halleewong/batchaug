@@ -3,7 +3,7 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
-from ..base import BatchTransform
+from ...base import BatchTransform
 
 
 def _build_rotation_matrices(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import torch
 
-from ..base import BatchDictTransform, BatchTransform
+from ...base import BatchDictTransform, BatchTransform
 from .smooth import gaussian_1d_batch, separable_gaussian_conv3d
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import torch
 
-from ..base import BatchDictTransform, BatchTransform
+from ...base import BatchDictTransform, BatchTransform
 
 
 class ScaleIntensity(BatchTransform):

@@ -3,7 +3,7 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
-from ..base import BatchDictTransform, BatchTransform
+from ...base import BatchDictTransform, BatchTransform
 from .affine import monai_affine_to_theta
 
 

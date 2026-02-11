@@ -1,27 +1,13 @@
 from .base import BatchDictTransform, BatchTransform
 from .compose import Compose
-from .geometric.affine import RandAffine, RandAffined
-from .geometric.flip import RandAxisFlip, RandAxisFlipd
-from .geometric.rotate90 import RandRotate90, RandRotate90d
-from .intensity.bias_field import RandBiasField, RandBiasFieldd
-from .intensity.contrast import (
-    RandAdjustContrast,
-    RandAdjustContrastd,
-    ScaleIntensity,
-    ScaleIntensityd,
-)
-from .intensity.gibbs_noise import RandGibbsNoise, RandGibbsNoised
-from .intensity.noise import RandGaussianNoise, RandGaussianNoised
-from .intensity.resolution import RandSimulateLowResolution, RandSimulateLowResolutiond
-from .intensity.sharpen import RandGaussianSharpen, RandGaussianSharpend
-from .intensity.smooth import RandGaussianSmooth, RandGaussianSmoothd
+from ._backend import get_backend, resolve_backend, set_backend
 
-__all__ = [
-    "BatchTransform",
-    "BatchDictTransform",
-    "Compose",
+# Transform names that are dispatched to the active backend
+_TRANSFORM_NAMES = [
     "RandAffine",
     "RandAffined",
+    "RandAxisFlip",
+    "RandAxisFlipd",
     "RandBiasField",
     "RandBiasFieldd",
     "RandGibbsNoise",
@@ -30,8 +16,6 @@ __all__ = [
     "ScaleIntensityd",
     "RandAdjustContrast",
     "RandAdjustContrastd",
-    "RandAxisFlip",
-    "RandAxisFlipd",
     "RandRotate90",
     "RandRotate90d",
     "RandGaussianNoise",
@@ -43,3 +27,26 @@ __all__ = [
     "RandSimulateLowResolution",
     "RandSimulateLowResolutiond",
 ]
+
+__all__ = [
+    "BatchTransform",
+    "BatchDictTransform",
+    "Compose",
+    "set_backend",
+    "get_backend",
+    "resolve_backend",
+    *_TRANSFORM_NAMES,
+]
+
+
+def __getattr__(name: str):
+    if name in _TRANSFORM_NAMES:
+        backend = resolve_backend()
+        if backend == "triton":
+            from . import triton as _mod
+        else:
+            from . import pytorch as _mod
+        val = getattr(_mod, name)
+        globals()[name] = val  # cache for subsequent access
+        return val
+    raise AttributeError(f"module 'batchaug' has no attribute {name!r}")
