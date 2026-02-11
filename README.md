@@ -104,6 +104,34 @@ params = t.sample_params(vol.shape[0], vol.shape, vol.device)
 noisy_vol = t.apply(vol, params)
 ```
 
+### Backends: PyTorch and Triton
+
+BatchAug includes two backends: a pure **PyTorch** backend and a **Triton** backend with custom fused kernels. When Triton is installed, the library auto-selects the fastest implementation for each transform:
+
+| Transform | Default backend | Why |
+|-----------|----------------|-----|
+| `ScaleIntensity` | Triton | Fused min/max reduction + rescale (1.5–4.4x faster) |
+| `RandAdjustContrast` | Triton | Fused normalize + pow + denormalize (1.2–3.0x faster) |
+| `RandBiasField` | Triton | On-the-fly Legendre polynomial eval avoids large basis tensor (3–10x faster) |
+| `RandGaussianSmooth` | PyTorch | cuDNN's conv3d is faster than custom Triton separable conv |
+| `RandGaussianSharpen` | PyTorch | Uses smooth internally, same cuDNN advantage |
+| All others | PyTorch | Already use optimized CUDA ops (cuFFT, grid_sample, etc.) |
+
+This happens transparently — `batchaug.ScaleIntensity` resolves to the Triton version, while `batchaug.RandGaussianSmooth` resolves to the PyTorch version. You can override:
+
+```python
+import batchaug
+
+# Force a specific backend
+batchaug.set_backend("pytorch")  # always use PyTorch
+batchaug.set_backend("triton")   # always use Triton
+batchaug.set_backend("auto")     # auto-select (default)
+
+# Or import from a specific backend directly
+from batchaug.pytorch import ScaleIntensity   # PyTorch version
+from batchaug.triton import ScaleIntensity    # Triton version
+```
+
 ### Available Transforms
 
 **Composition**

@@ -4,7 +4,7 @@ Measures wall-clock time for each Triton-accelerated transform against
 its PyTorch counterpart. Only benchmarks apply() — sample_params excluded.
 
 Usage:
-    conda run -n interseg3d python examples/benchmark_triton.py
+    conda run -n interseg3d python examples/benchmark_triton.py 2>&1 | tee examples/benchmark_triton.log
     conda run -n interseg3d python examples/benchmark_triton.py --spatial_sizes 64 128 256
 """
 
