@@ -4,7 +4,7 @@ Batched GPU augmentations for 3D medical imaging. The API mirrors [MONAI](https:
 
 - **MONAI-compatible API** — drop-in replacements with matching output when B=1
 - **Independent augmentation across batch** (B dimension) — each batch element samples its own random parameters
-- **Same augmentation across channels** (C dimension) — all paired slices get the same transform
+- **Same augmentation across channels** (C dimension) — all paired volumes get the same transform
 - **GPU-native** — all operations stay on CUDA, no CPU roundtrips
 - **Auto backend selection** — Triton fused kernels where faster, PyTorch/cuDNN elsewhere
 - **dtype support** — works with both `float32` and `bfloat16`
@@ -13,18 +13,29 @@ Batched GPU augmentations for 3D medical imaging. The API mirrors [MONAI](https:
 
 | Library | 2D | 3D | Batched | GPU |
 |---------|----|----|---------|-----|
-| [torchvision](https://github.com/pytorch/vision) | ✅ | ❌ | ❌ | ❌ |
-| [kornia](https://github.com/kornia/kornia) | ✅ | ❌ | ✅ | ✅ |
+| [torchvision](https://github.com/pytorch/vision) | ✅ | ❌ | ❌ | ○ |
+| [kornia](https://github.com/kornia/kornia) | ✅ | ○ | ✅ | ✅ |
 | [batchgenerators](https://github.com/MIC-DKFZ/batchgenerators) | ✅ | ✅ | ❌ | ❌ |
 | [torchio](https://github.com/TorchIO-project/torchio) | ❌ | ✅ | ❌ | ❌ |
 | [monai](https://github.com/Project-MONAI/MONAI) | ✅ | ✅ | ❌ | ✅ |
 | **batchaug** | ❌ | ✅ | ✅ | ✅ |
 
+○ = partial support
+
 ## Installation
 
+Requires PyTorch with CUDA. Install PyTorch first following [pytorch.org](https://pytorch.org/get-started/locally/), then:
+
 ```
+pip install batchaug
+```
+
+For development:
+
+```
+git clone https://github.com/halleewong/batchaug.git
 cd batchaug
-pip install -e .
+pip install -e ".[test]"
 ```
 
 ## Usage
@@ -81,7 +92,7 @@ vol = torch.stack(augmented_vols)
 seg = torch.stack(augmented_segs)
 ```
 
-The same parameters are used for each channel within a batch element. To perform data augmentation independently accross channels, simply reshape the data to merge the B and C dimensions, apply the augmentation, then reshape back:
+The same parameters are used for each channel within a batch element. To perform data augmentation independently across channels, simply reshape the data to merge the B and C dimensions, apply the augmentation, then reshape back:
 
 ```python
 # For independent channel augmentation, merge B and C dims

@@ -5,10 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "batchaug"
 version = "0.1.0"
-description = "Batched GPU augmentations for paired 3D medical imaging data"
+description = "Batched GPU augmentations for 3D medical imaging with MONAI-compatible API, independent per-batch-element parameter sampling, and automatic PyTorch/Triton backend selection"
 requires-python = ">=3.10"
+license = "Apache-2.0"
+readme = "README.md"
+
 dependencies = [
     "torch>=2.0",
+    "triton>=3.0",
 ]
 
 [project.optional-dependencies]
@@ -16,6 +20,11 @@ test = [
     "pytest>=7.0",
     "monai>=1.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/halleewong/batchaug"
+Repository = "https://github.com/halleewong/batchaug"
+Issues = "https://github.com/halleewong/batchaug/issues"
 
 [tool.setuptools.packages.find]
 include = ["batchaug*"]

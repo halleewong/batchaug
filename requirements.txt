@@ -1,3 +1,4 @@
 torch>=2.0
+triton>=3.0
 monai>=1.0
 pytest>=7.0
