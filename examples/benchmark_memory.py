@@ -324,6 +324,58 @@ def bench_one_rand_affine(B, C, S):
     return monai_mb, ba_mb, in_mb
 
 
+def bench_one_rand_3d_elastic(B, C, S):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    seg = torch.randint(0, 5, (B, C, S, S, S), device="cuda").float()
+    batch = {"vol": vol, "seg": seg}
+    in_mb = input_size_mb(B, C, S, n_tensors=2)
+
+    ba_t = batchaug.Rand3DElasticd(
+        keys=["vol", "seg"], prob=1.0,
+        sigma_range=(3.0, 5.0), magnitude_range=(0.1, 0.5),
+        mode={"vol": "bilinear", "seg": "nearest"},
+    )
+    ba_t(batch)
+    ba_mb = measure_peak_mb(lambda: ba_t(batch))
+
+    monai_t = monai.transforms.Rand3DElasticd(
+        keys=["vol", "seg"],
+        sigma_range=(3.0, 5.0), magnitude_range=(0.1, 0.5),
+        prob=1.0,
+        mode=("bilinear", "nearest"),
+        padding_mode="zeros",
+    )
+    monai_per_sample_loop(monai_t, batch, ["vol", "seg"])
+    monai_mb = measure_peak_mb(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol", "seg"])
+    )
+
+    del vol, seg, batch
+    torch.cuda.empty_cache()
+    return monai_mb, ba_mb, in_mb
+
+
+def bench_one_divisible_pad(B, C, S):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    seg = torch.randint(0, 5, (B, C, S, S, S), device="cuda").float()
+    batch = {"vol": vol, "seg": seg}
+    in_mb = input_size_mb(B, C, S, n_tensors=2)
+
+    ba_t = batchaug.DivisiblePadd(keys=["vol", "seg"], k=48)
+    ba_t(batch)
+    ba_mb = measure_peak_mb(lambda: ba_t(batch))
+
+    monai_t = monai.transforms.DivisiblePadd(keys=["vol", "seg"], k=48)
+    monai_per_sample_loop(monai_t, batch, ["vol", "seg"])
+    monai_mb = measure_peak_mb(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol", "seg"])
+    )
+
+    del vol, seg, batch
+    torch.cuda.empty_cache()
+    return monai_mb, ba_mb, in_mb
+
+
 # ---------------------------------------------------------------------------
 # Table printing
 # ---------------------------------------------------------------------------
@@ -341,6 +393,8 @@ BENCHMARKS = {
     "RandBiasFieldd [vol]": bench_one_rand_bias_field,
     "RandGibbsNoised [vol]": bench_one_rand_gibbs_noise,
     "RandAffined [vol+seg]": bench_one_rand_affine,
+    "Rand3DElasticd [vol+seg]": bench_one_rand_3d_elastic,
+    "DivisiblePadd [vol+seg]": bench_one_divisible_pad,
 }
 
 

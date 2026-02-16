@@ -4,6 +4,10 @@ from ._backend import get_backend, resolve_backend, set_backend
 
 # Transform names that are dispatched to the active backend
 _TRANSFORM_NAMES = [
+    "DivisiblePad",
+    "DivisiblePadd",
+    "Rand3DElastic",
+    "Rand3DElasticd",
     "RandAffine",
     "RandAffined",
     "RandAxisFlip",

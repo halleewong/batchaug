@@ -1,22 +1,24 @@
 # BatchAug
 
-Batched GPU augmentations for paired 3D medical imaging data (volumes + segmentations). Replaces per-sample MONAI augmentation loops with batched operations that run entirely on the GPU.
+Batched GPU augmentations for 3D medical imaging. The API mirrors [MONAI](https://github.com/Project-MONAI/MONAI) but performs augmentations over an entire batch at once, sampling independent random parameters per batch element (similar to [Kornia](https://github.com/kornia/kornia) for 2D). Like MONAI, dictionary transforms apply the same augmentation to multiple volumes and segmentations, keeping paired data aligned. The package provides both PyTorch and Triton backends and automatically selects the fastest one for each transform.
 
-- **Same augmentation across channels** (C dimension) — all paired slices get the same transform
+- **MONAI-compatible API** — drop-in replacements with matching output when B=1
 - **Independent augmentation across batch** (B dimension) — each batch element samples its own random parameters
+- **Same augmentation across channels** (C dimension) — all paired slices get the same transform
 - **GPU-native** — all operations stay on CUDA, no CPU roundtrips
-- **MONAI-compatible** — when B=1, results match MONAI's output
+- **Auto backend selection** — Triton fused kernels where faster, PyTorch/cuDNN elsewhere
 - **dtype support** — works with both `float32` and `bfloat16`
 
 ## Comparison with Other Libraries
 
 | Library | 2D | 3D | Batched | GPU |
 |---------|----|----|---------|-----|
-| torchvision | ✓ | ✗ | ✗ | ✗ |
-| kornia | ✓ | ✗ | ✓ | ✓ |
-| batchgenerators | ✓ | ✓ | ✗ | ✗ |
-| monai | ✓ | ✓ | ✗ | ✓ |
-| **batchaug** | **✗** | **✓** | **✓** | **✓** |
+| [torchvision](https://github.com/pytorch/vision) | ✅ | ❌ | ❌ | ❌ |
+| [kornia](https://github.com/kornia/kornia) | ✅ | ❌ | ✅ | ✅ |
+| [batchgenerators](https://github.com/MIC-DKFZ/batchgenerators) | ✅ | ✅ | ❌ | ❌ |
+| [torchio](https://github.com/TorchIO-project/torchio) | ❌ | ✅ | ❌ | ❌ |
+| [monai](https://github.com/Project-MONAI/MONAI) | ✅ | ✅ | ❌ | ✅ |
+| **batchaug** | ❌ | ✅ | ✅ | ✅ |
 
 ## Installation
 
@@ -31,7 +33,9 @@ All inputs have shape `(B, C, H, W, D)` where B is the batch size and C is the n
 
 ### Task Augmentation
 
-Apply the same augmentation to paired volumes and segmentations using dictionary transforms. Parameters are sampled once and applied to all keys, so paired data stays aligned. 
+Sometimes it is useful to apply the same augmentations across a set of volumes and segmentations from the same dataset — i.e., *task augmentations* as in [UniverSeg](https://arxiv.org/abs/2304.06131), [Tyche](https://arxiv.org/abs/2401.13650), and [MultiverSeg](https://arxiv.org/abs/2412.15058). In this setting, the channel dimension stores different examples from the same task. 
+
+`BatchAug` samples parameters independently for each entry in the batch, then applies the same transformation to every entry along the channel dimension. Dictionary transforms apply the same augmentation to all keys, so paired data (e.g. vol + seg) stays aligned. For more details on parameter sampling, see [docs/sampling.md](docs/sampling.md).
 
 ```python
 import torch
@@ -62,17 +66,19 @@ augmented_batch = task_augs(batch)
 
 With `lazy=True`, geometric transforms (rotations, flips, affines) are fused into a single `grid_sample` call, avoiding redundant interpolation. Intensity transforms are applied eagerly at their position in the pipeline.
 
-This replaces the slow per-sample loop:
+This replaces the slow per-sample loop required by MONAI:
 
 ```python
-# Before (slow, sequential)
-for i in range(bs):
-    sample = {"vol": x_tensors[i], "seg": y_tensors[i]}
-    aug_sample = train_gpu_task_augmentations(sample)
-    augmented_vols.append(aug_sample["vol"])
-    augmented_segs.append(aug_sample["seg"])
-x_tensors = torch.stack(augmented_vols, dim=0)
-y_tensors = torch.stack(augmented_segs, dim=0)
+# Before: MONAI per-sample loop (slow, sequential)
+monai_aug = monai.transforms.Compose([...])  # single-sample MONAI pipeline
+augmented_vols, augmented_segs = [], []
+for i in range(B):
+    sample = {"vol": vol[i], "seg": seg[i]}
+    out = monai_aug(sample)
+    augmented_vols.append(out["vol"])
+    augmented_segs.append(out["seg"])
+vol = torch.stack(augmented_vols)
+seg = torch.stack(augmented_segs)
 ```
 
 The same parameters are used for each channel within a batch element. To perform data augmentation independently accross channels, simply reshape the data to merge the B and C dimensions, apply the augmentation, then reshape back:
@@ -147,6 +153,7 @@ from batchaug.triton import ScaleIntensity    # Triton version
 | `RandAxisFlip` | `RandAxisFlipd` | Random flip along a spatial axis |
 | `RandRotate90` | `RandRotate90d` | Random 90-degree rotation |
 | `RandAffine` | `RandAffined` | Random affine (rotate, shear, translate, scale) with per-key interpolation modes |
+| `Rand3DElastic` | `Rand3DElasticd` | Random elastic deformation via smoothed displacement fields |
 
 **Intensity**
 
@@ -160,6 +167,12 @@ from batchaug.triton import ScaleIntensity    # Triton version
 | `RandSimulateLowResolution` | `RandSimulateLowResolutiond` | Downsample/upsample simulation |
 | `RandBiasField` | `RandBiasFieldd` | Polynomial bias field |
 | `RandGibbsNoise` | `RandGibbsNoised` | FFT-based Gibbs ringing |
+
+**Utility**
+
+| Transform | Dict version | Description |
+|-----------|-------------|-------------|
+| `DivisiblePad` | `DivisiblePadd` | Pad spatial dims to be divisible by k |
 
 
 # Development

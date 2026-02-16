@@ -272,6 +272,48 @@ def bench_one_rand_affine(B, C, S, repeats):
     return monai_ms, ba_ms
 
 
+def bench_one_rand_3d_elastic(B, C, S, repeats):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    seg = torch.randint(0, 5, (B, C, S, S, S), device="cuda").float()
+    batch = {"vol": vol, "seg": seg}
+
+    ba_t = batchaug.Rand3DElasticd(
+        keys=["vol", "seg"], prob=1.0,
+        sigma_range=(3.0, 5.0), magnitude_range=(0.1, 0.5),
+        mode={"vol": "bilinear", "seg": "nearest"},
+    )
+    ba_ms = cuda_timer(lambda: ba_t(batch), repeats=repeats)
+
+    monai_t = monai.transforms.Rand3DElasticd(
+        keys=["vol", "seg"],
+        sigma_range=(3.0, 5.0), magnitude_range=(0.1, 0.5),
+        prob=1.0,
+        mode=("bilinear", "nearest"),
+        padding_mode="zeros",
+    )
+    monai_ms = cuda_timer(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol", "seg"]),
+        repeats=repeats,
+    )
+    return monai_ms, ba_ms
+
+
+def bench_one_divisible_pad(B, C, S, repeats):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    seg = torch.randint(0, 5, (B, C, S, S, S), device="cuda").float()
+    batch = {"vol": vol, "seg": seg}
+
+    ba_t = batchaug.DivisiblePadd(keys=["vol", "seg"], k=48)
+    ba_ms = cuda_timer(lambda: ba_t(batch), repeats=repeats)
+
+    monai_t = monai.transforms.DivisiblePadd(keys=["vol", "seg"], k=48)
+    monai_ms = cuda_timer(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol", "seg"]),
+        repeats=repeats,
+    )
+    return monai_ms, ba_ms
+
+
 # ---------------------------------------------------------------------------
 # Table printing
 # ---------------------------------------------------------------------------
@@ -289,6 +331,8 @@ BENCHMARKS = {
     "RandBiasFieldd [vol]": bench_one_rand_bias_field,
     "RandGibbsNoised [vol]": bench_one_rand_gibbs_noise,
     "RandAffined [vol+seg]": bench_one_rand_affine,
+    "Rand3DElasticd [vol+seg]": bench_one_rand_3d_elastic,
+    "DivisiblePadd [vol+seg]": bench_one_divisible_pad,
 }
 
 
