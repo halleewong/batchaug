@@ -1,11 +1,12 @@
 # BatchAug
 
-Batched GPU augmentations for 3D medical imaging. The API mirrors [MONAI](https://github.com/Project-MONAI/MONAI) but performs augmentations over an entire batch at once, sampling independent random parameters per batch element (similar to [Kornia](https://github.com/kornia/kornia) for 2D). Like MONAI, dictionary transforms apply the same augmentation to multiple volumes and segmentations, keeping paired data aligned. The package provides both PyTorch and Triton backends and automatically selects the fastest one for each transform.
+Batched GPU augmentations for 3D medical imaging data. The API mirrors [MONAI](https://github.com/Project-MONAI/MONAI) but performs augmentations over an entire batch at once, sampling independent random parameters per batch element (similar to [Kornia](https://github.com/kornia/kornia) for 2D). Like MONAI, dictionary transforms apply the same augmentation to multiple volumes and segmentations, keeping paired data aligned. The package provides both PyTorch and Triton backends and automatically selects the fastest one for each transform.
 
 - **MONAI-compatible API** — drop-in replacements with matching output when B=1
 - **Independent augmentation across batch** (B dimension) — each batch element samples its own random parameters
 - **Same augmentation across channels** (C dimension) — all paired volumes get the same transform
 - **GPU-native** — all operations stay on CUDA, no CPU roundtrips
+- **Fast** — 2–1000x faster than MONAI per-sample loops depending on the transform ([benchmarks](#benchmarks))
 - **Auto backend selection** — Triton fused kernels where faster, PyTorch/cuDNN elsewhere
 - **dtype support** — works with both `float32` and `bfloat16`
 
@@ -148,6 +149,28 @@ batchaug.set_backend("auto")     # auto-select (default)
 from batchaug.pytorch import ScaleIntensity   # PyTorch version
 from batchaug.triton import ScaleIntensity    # Triton version
 ```
+
+### Benchmarks
+
+Per-transform speedup over MONAI's per-sample loop, using the default auto backend (Triton where faster, PyTorch elsewhere). Measured on NVIDIA L40S with B=5, C=4, 128^3:
+
+| Transform | MONAI (ms) | BatchAug (ms) | Speedup |
+|-----------|-----------|--------------|---------|
+| RandBiasField | 660.5 | 0.6 | **1118x** |
+| RandGaussianNoise | 744.0 | 2.6 | **282x** |
+| Rand3DElastic | 223.2 | 9.9 | **23x** |
+| RandAffine | 113.5 | 11.5 | **10x** |
+| RandGibbsNoise | 49.0 | 12.4 | **4x** |
+| ScaleIntensity | 2.6 | 0.9 | **3x** |
+| RandGaussianSmooth | 5.8 | 3.6 | **2x** |
+
+The Triton backend provides additional speedups over the PyTorch backend for select transforms:
+
+| Transform | Triton vs PyTorch | Why |
+|-----------|------------------|-----|
+| RandBiasField | 3–10x | On-the-fly Legendre eval avoids large basis tensor |
+| ScaleIntensity | 1.5–4.4x | Fused min/max reduction + rescale |
+| RandAdjustContrast | 1.2–3.0x | Fused normalize + pow + denormalize |
 
 ### Available Transforms
 
