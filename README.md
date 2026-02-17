@@ -62,10 +62,10 @@ batch = {
 # Compose a pipeline
 task_augs = batchaug.Compose(
     transforms=[
-        batchaug.RandRotate90d(keys=["vol", "seg"], prob=0.15, max_k=3, spatial_axes=(0, 1)),
-        batchaug.RandAxisFlipd(keys=["vol", "seg"], prob=0.15),
-        batchaug.RandGaussianNoised(keys=["vol"], prob=0.15, mean=0.0, std=0.5),
-        batchaug.RandAffined(keys=["vol", "seg"], prob=0.15,
+        batchaug.RandRotate90d(keys=["vol", "seg"], prob=0.5, max_k=3, spatial_axes=(0, 1)),
+        batchaug.RandAxisFlipd(keys=["vol", "seg"], prob=0.5),
+        batchaug.RandGaussianNoised(keys=["vol"], prob=0.5, mean=0.0, std=0.5),
+        batchaug.RandAffined(keys=["vol", "seg"], prob=0.5,
                              rotate_range=0.785, shear_range=0.3, translate_range=5),
         batchaug.ScaleIntensityd(keys=["vol"]),
     ],
@@ -82,15 +82,15 @@ This replaces the slow per-sample loop required by MONAI:
 
 ```python
 # Before: MONAI per-sample loop (slow, sequential)
-monai_aug = monai.transforms.Compose([...])  # single-sample MONAI pipeline
-augmented_vols, augmented_segs = [], []
+monai_aug = monai.transforms.Compose([...])  # same transforms, MONAI API
+
+augmented = {"vol": [], "seg": []}
 for i in range(B):
-    sample = {"vol": vol[i], "seg": seg[i]}
+    sample = {"vol": batch["vol"][i], "seg": batch["seg"][i]}
     out = monai_aug(sample)
-    augmented_vols.append(out["vol"])
-    augmented_segs.append(out["seg"])
-vol = torch.stack(augmented_vols)
-seg = torch.stack(augmented_segs)
+    augmented["vol"].append(out["vol"])
+    augmented["seg"].append(out["seg"])
+augmented = {k: torch.stack(v) for k, v in augmented.items()}
 ```
 
 The same parameters are used for each channel within a batch element. To perform data augmentation independently across channels, simply reshape the data to merge the B and C dimensions, apply the augmentation, then reshape back:
