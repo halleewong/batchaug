@@ -12,30 +12,32 @@ Batched GPU augmentations for 3D medical imaging data. The API mirrors [MONAI](h
 
 ## Comparison with Other Libraries
 
-| Library | 2D | 3D | Batched | GPU |
+| Library | 2D | 3D | Batched<sup>1</sup> | GPU |
 |---------|----|----|---------|-----|
 | [torchvision](https://github.com/pytorch/vision) | ✅ | ❌ | ❌ | ○ |
 | [kornia](https://github.com/kornia/kornia) | ✅ | ○ | ✅ | ✅ |
-| [batchgenerators](https://github.com/MIC-DKFZ/batchgenerators) | ✅ | ✅ | ❌ | ❌ |
+| [batchgenerators](https://github.com/MIC-DKFZ/batchgenerators) | ✅ | ✅ | ✅ | ❌ |
 | [torchio](https://github.com/TorchIO-project/torchio) | ❌ | ✅ | ❌ | ❌ |
-| [monai](https://github.com/Project-MONAI/MONAI) | ✅ | ✅ | ❌ | ✅ |
+| [monai](https://github.com/Project-MONAI/MONAI) | ✅ | ✅ | ❌ | ○ |
 | **batchaug** | ❌ | ✅ | ✅ | ✅ |
 
 ○ = partial support
 
+<sup>1</sup> accepts a batch of examples as input and samples augmentation parameters independently for each example
+
 ## Installation
 
-Requires PyTorch with CUDA. Install PyTorch first following [pytorch.org](https://pytorch.org/get-started/locally/), then:
-
-```
-pip install batchaug
-```
-
-For development:
+Requires PyTorch with CUDA. Install PyTorch first following [pytorch.org](https://pytorch.org/get-started/locally/), then install from source:
 
 ```
 git clone https://github.com/halleewong/batchaug.git
 cd batchaug
+pip install -e .
+```
+
+To also install test dependencies:
+
+```
 pip install -e ".[test]"
 ```
 
