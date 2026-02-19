@@ -64,9 +64,9 @@ task_augs = batchaug.Compose(
     transforms=[
         batchaug.RandRotate90d(keys=["vol", "seg"], prob=0.5, max_k=3, spatial_axes=(0, 1)),
         batchaug.RandAxisFlipd(keys=["vol", "seg"], prob=0.5),
-        batchaug.RandGaussianNoised(keys=["vol"], prob=0.5, mean=0.0, std=0.5),
         batchaug.RandAffined(keys=["vol", "seg"], prob=0.5,
                              rotate_range=0.785, shear_range=0.3, translate_range=5),
+        batchaug.RandGaussianNoised(keys=["vol"], prob=0.5, mean=0.0, std=0.5),
         batchaug.ScaleIntensityd(keys=["vol"]),
     ],
     lazy=True,
@@ -150,6 +150,57 @@ from batchaug.pytorch import ScaleIntensity   # PyTorch version
 from batchaug.triton import ScaleIntensity    # Triton version
 ```
 
+### Fused Pipeline
+
+`FusedAugment` and `FusedAugmentd` are an alternative to `Compose` that fuse multiple transforms into fewer kernel calls. The pipeline has a fixed order:
+
+- **Phase 1 — Geometric**: flip + rotate90 + affine composed into a single `grid_sample`
+- **Phase 2 — Elastic**: separate `grid_sample` (non-linear, cannot be fused with affine)
+- **Phase 3 — Spatial intensity**: smooth, sharpen, low-res simulation, Gibbs noise (separate cuDNN/cuFFT kernels)
+- **Phase 4 — Elementwise**: scale + contrast + bias field + Gaussian noise fused into a single Triton kernel
+
+```python
+from batchaug.triton import FusedAugmentd
+
+aug = FusedAugmentd(
+    keys=["vol", "seg"],
+    flip_prob=0.5,
+    rotate90_prob=0.5, max_k=3, spatial_axes=(0, 1),
+    affine_prob=0.5, rotate_range=0.785, shear_range=0.3, translate_range=5,
+    noise_prob=0.5, noise_std=(0.0, 0.5),
+    bias_field_prob=0.5,
+    scale_intensity=True,
+    mode={"vol": "bilinear", "seg": "nearest"},
+)
+
+augmented_batch = aug(batch)
+```
+
+Performance is mixed and depends on volume size, batch size, and number of channels. On an NVIDIA L40S with a 12-transform pipeline, prob=0.5 (median of 10 runs):
+
+| Size | C | B | Eager (ms) | Lazy (ms) | Fused (ms) | Fused vs Lazy |
+|------|---|---|-----------|----------|-----------|--------------|
+| 64^3 | 1 | 1 | 11.7 | 11.5 | 63.7 | 0.2x |
+| 64^3 | 1 | 2 | 12.6 | 11.0 | 9.5 | **1.2x** |
+| 64^3 | 1 | 5 | 12.9 | 13.6 | 79.4 | 0.2x |
+| 64^3 | 4 | 1 | 5.5 | 5.4 | 9.5 | 0.6x |
+| 64^3 | 4 | 2 | 54.3 | 10.4 | 9.4 | **1.1x** |
+| 64^3 | 4 | 5 | 14.4 | 13.2 | 11.8 | **1.1x** |
+| 128^3 | 1 | 1 | 13.1 | 13.7 | 14.5 | 0.9x |
+| 128^3 | 1 | 2 | 17.8 | 17.2 | 13.2 | **1.3x** |
+| 128^3 | 1 | 5 | 36.3 | 45.5 | 30.9 | **1.5x** |
+| 128^3 | 4 | 1 | 18.0 | 16.4 | 15.1 | **1.1x** |
+| 128^3 | 4 | 2 | 27.6 | 30.7 | 25.8 | **1.2x** |
+| 128^3 | 4 | 5 | 75.0 | 67.3 | 89.2 | 0.8x |
+
+`FusedAugment` tends to help at **larger volumes (128^3+)** where the elementwise Triton kernel amortizes its fixed launch overhead. At smaller volumes (64^3), the unfused spatial passes (Gibbs noise, low-res simulation, elastic) can dominate and make it slower. The gains are also less consistent at large batch sizes (B=5, C=4) where memory bandwidth becomes the bottleneck regardless of fusion.
+
+`Compose` with `lazy=True` is simpler and performs well in most cases. Use `FusedAugment` as an option to try when working at larger spatial scales. To evaluate on your specific workload, run the benchmark script:
+
+```
+python examples/benchmark_fused.py --batch_sizes 1 2 5 --spatial_sizes 64 128
+```
+
 ### Benchmarks
 
 Per-transform speedup over MONAI's per-sample loop, using the default auto backend (Triton where faster, PyTorch elsewhere). Measured on NVIDIA L40S with B=5, C=4, 128^3:
@@ -179,6 +230,7 @@ The Triton backend provides additional speedups over the PyTorch backend for sel
 | Transform | Description |
 |-----------|-------------|
 | `Compose` | Sequential pipeline with optional lazy geometric fusion |
+| `FusedAugment` / `FusedAugmentd` | Fixed-order pipeline with additional kernel fusion (Triton backend) |
 
 **Geometric**
 

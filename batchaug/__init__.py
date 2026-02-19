@@ -32,6 +32,12 @@ _TRANSFORM_NAMES = [
     "RandSimulateLowResolutiond",
 ]
 
+# Names that only exist in the Triton backend (no PyTorch equivalent)
+_TRITON_ONLY_NAMES = [
+    "FusedAugment",
+    "FusedAugmentd",
+]
+
 __all__ = [
     "BatchTransform",
     "BatchDictTransform",
@@ -40,6 +46,7 @@ __all__ = [
     "get_backend",
     "resolve_backend",
     *_TRANSFORM_NAMES,
+    *_TRITON_ONLY_NAMES,
 ]
 
 
@@ -52,5 +59,10 @@ def __getattr__(name: str):
             from . import pytorch as _mod
         val = getattr(_mod, name)
         globals()[name] = val  # cache for subsequent access
+        return val
+    if name in _TRITON_ONLY_NAMES:
+        from . import triton as _mod
+        val = getattr(_mod, name)
+        globals()[name] = val
         return val
     raise AttributeError(f"module 'batchaug' has no attribute {name!r}")

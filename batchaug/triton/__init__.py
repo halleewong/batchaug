@@ -12,6 +12,9 @@ from .intensity.contrast import (  # noqa: F811
 )
 from .intensity.bias_field import RandBiasField, RandBiasFieldd  # noqa: F811
 
+# Fused pipeline (Triton-only, no PyTorch equivalent)
+from .fused import FusedAugment, FusedAugmentd  # noqa: F811
+
 # NOTE: Triton smooth/sharpen kernels exist but are NOT exported by default
 # because cuDNN's conv3d is faster. They are available for explicit use via:
 #   from batchaug.triton.intensity.smooth import RandGaussianSmooth
