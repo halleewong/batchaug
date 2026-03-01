@@ -186,23 +186,31 @@ The Triton backend provides additional speedups over the PyTorch backend for sel
 
 | Transform | Dict version | Description |
 |-----------|-------------|-------------|
-| `RandAxisFlip` | `RandAxisFlipd` | Random flip along a spatial axis |
-| `RandRotate90` | `RandRotate90d` | Random 90-degree rotation |
-| `RandAffine` | `RandAffined` | Random affine (rotate, shear, translate, scale) with per-key interpolation modes |
 | `Rand3DElastic` | `Rand3DElasticd` | Random elastic deformation via smoothed displacement fields |
+| `RandAffine` | `RandAffined` | Random affine (rotate, shear, translate, scale) with per-key interpolation modes |
+| `RandAxisFlip` | `RandAxisFlipd` | Random flip along a spatial axis |
+| `RandFlip` | `RandFlipd` | Flip along specified axes |
+| `RandRotate` | `RandRotated` | Arbitrary-angle rotation |
+| `RandRotate90` | `RandRotate90d` | Random 90-degree rotation |
+| `RandZoom` | `RandZoomd` | Random zoom/scale |
 
 **Intensity**
 
 | Transform | Dict version | Description |
 |-----------|-------------|-------------|
-| `ScaleIntensity` | `ScaleIntensityd` | Rescale intensity to [minv, maxv], per element or per element x channel |
-| `RandGaussianNoise` | `RandGaussianNoised` | Additive Gaussian noise with per-element mean/std |
 | `RandAdjustContrast` | `RandAdjustContrastd` | Gamma correction |
-| `RandGaussianSmooth` | `RandGaussianSmoothd` | Separable Gaussian blur |
-| `RandGaussianSharpen` | `RandGaussianSharpend` | Unsharp masking |
-| `RandSimulateLowResolution` | `RandSimulateLowResolutiond` | Downsample/upsample simulation |
 | `RandBiasField` | `RandBiasFieldd` | Polynomial bias field |
+| `RandGaussianNoise` | `RandGaussianNoised` | Additive Gaussian noise with per-element mean/std |
+| `RandGaussianSharpen` | `RandGaussianSharpend` | Unsharp masking |
+| `RandGaussianSmooth` | `RandGaussianSmoothd` | Separable Gaussian blur |
 | `RandGibbsNoise` | `RandGibbsNoised` | FFT-based Gibbs ringing |
+| `RandRicianNoise` | `RandRicianNoised` | Rician-distributed noise (MRI-specific) |
+| `RandScaleIntensity` | `RandScaleIntensityd` | Multiply by random factor |
+| `RandScaleIntensityFixedMean` | `RandScaleIntensityFixedMeand` | Scale while preserving mean |
+| `RandShiftIntensity` | `RandShiftIntensityd` | Add random offset |
+| `RandSimulateLowResolution` | `RandSimulateLowResolutiond` | Downsample/upsample simulation |
+| `RandStdShiftIntensity` | `RandStdShiftIntensityd` | Shift by random multiple of per-sample std |
+| `ScaleIntensity` | `ScaleIntensityd` | Rescale intensity to [minv, maxv], per element or per element x channel |
 
 **Utility**
 
