@@ -3,9 +3,9 @@
 Sweeps over spatial sizes and channel counts for each transform.
 
 Usage:
-    conda run -n interseg3d python examples/benchmark_time.py 2>&1 | tee benchmark_time.log
-    conda run -n interseg3d python examples/benchmark_time.py --batch_size 4
-    conda run -n interseg3d python examples/benchmark_time.py --spatial_sizes 64 128 --channels 1 4
+    conda run -n batchaug python examples/benchmark_time.py 2>&1 | tee examples/benchmark_time.log
+    conda run -n batchaug python examples/benchmark_time.py --batch_size 4
+    conda run -n batchaug python examples/benchmark_time.py --spatial_sizes 64 128 --channels 1 4
 """
 
 import argparse
@@ -314,6 +314,146 @@ def bench_one_divisible_pad(B, C, S, repeats):
     return monai_ms, ba_ms
 
 
+def bench_one_rand_scale_intensity(B, C, S, repeats):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    batch = {"vol": vol}
+
+    ba_t = batchaug.RandScaleIntensityd(keys=["vol"], prob=1.0, factors=(-0.5, 0.5))
+    ba_ms = cuda_timer(lambda: ba_t(batch), repeats=repeats)
+
+    monai_t = monai.transforms.RandScaleIntensityd(keys=["vol"], prob=1.0, factors=(-0.5, 0.5))
+    monai_ms = cuda_timer(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol"]),
+        repeats=repeats,
+    )
+    return monai_ms, ba_ms
+
+
+def bench_one_rand_shift_intensity(B, C, S, repeats):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    batch = {"vol": vol}
+
+    ba_t = batchaug.RandShiftIntensityd(keys=["vol"], prob=1.0, offsets=(-0.3, 0.3))
+    ba_ms = cuda_timer(lambda: ba_t(batch), repeats=repeats)
+
+    monai_t = monai.transforms.RandShiftIntensityd(keys=["vol"], prob=1.0, offsets=(-0.3, 0.3))
+    monai_ms = cuda_timer(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol"]),
+        repeats=repeats,
+    )
+    return monai_ms, ba_ms
+
+
+def bench_one_rand_std_shift_intensity(B, C, S, repeats):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    batch = {"vol": vol}
+
+    ba_t = batchaug.RandStdShiftIntensityd(keys=["vol"], prob=1.0, factors=(-3.0, 3.0))
+    ba_ms = cuda_timer(lambda: ba_t(batch), repeats=repeats)
+
+    monai_t = monai.transforms.RandStdShiftIntensityd(keys=["vol"], prob=1.0, factors=(-3.0, 3.0))
+    monai_ms = cuda_timer(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol"]),
+        repeats=repeats,
+    )
+    return monai_ms, ba_ms
+
+
+def bench_one_rand_scale_fixed_mean(B, C, S, repeats):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    batch = {"vol": vol}
+
+    ba_t = batchaug.RandScaleIntensityFixedMeand(keys=["vol"], prob=1.0, factors=(-0.5, 0.5))
+    ba_ms = cuda_timer(lambda: ba_t(batch), repeats=repeats)
+
+    monai_t = monai.transforms.RandScaleIntensityFixedMeand(keys=["vol"], prob=1.0, factors=(-0.5, 0.5))
+    monai_ms = cuda_timer(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol"]),
+        repeats=repeats,
+    )
+    return monai_ms, ba_ms
+
+
+def bench_one_rand_rician_noise(B, C, S, repeats):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    batch = {"vol": vol}
+
+    ba_t = batchaug.RandRicianNoised(keys=["vol"], prob=1.0, std=0.1)
+    ba_ms = cuda_timer(lambda: ba_t(batch), repeats=repeats)
+
+    monai_t = monai.transforms.RandRicianNoised(keys=["vol"], prob=1.0, std=0.1)
+    monai_ms = cuda_timer(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol"]),
+        repeats=repeats,
+    )
+    return monai_ms, ba_ms
+
+
+def bench_one_rand_flip(B, C, S, repeats):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    seg = torch.randint(0, 5, (B, C, S, S, S), device="cuda").float()
+    batch = {"vol": vol, "seg": seg}
+
+    ba_t = batchaug.RandFlipd(keys=["vol", "seg"], prob=1.0, spatial_axis=None)
+    ba_ms = cuda_timer(lambda: ba_t(batch), repeats=repeats)
+
+    monai_t = monai.transforms.RandFlipd(keys=["vol", "seg"], prob=1.0, spatial_axis=None)
+    monai_ms = cuda_timer(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol", "seg"]),
+        repeats=repeats,
+    )
+    return monai_ms, ba_ms
+
+
+def bench_one_rand_rotate(B, C, S, repeats):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    seg = torch.randint(0, 5, (B, C, S, S, S), device="cuda").float()
+    batch = {"vol": vol, "seg": seg}
+
+    ba_t = batchaug.RandRotated(
+        keys=["vol", "seg"], prob=1.0,
+        range_x=0.3, range_y=0.3, range_z=0.3,
+        mode={"vol": "bilinear", "seg": "nearest"},
+    )
+    ba_ms = cuda_timer(lambda: ba_t(batch), repeats=repeats)
+
+    monai_t = monai.transforms.RandRotated(
+        keys=["vol", "seg"], prob=1.0,
+        range_x=0.3, range_y=0.3, range_z=0.3,
+        mode=("bilinear", "nearest"),
+        padding_mode="border",
+    )
+    monai_ms = cuda_timer(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol", "seg"]),
+        repeats=repeats,
+    )
+    return monai_ms, ba_ms
+
+
+def bench_one_rand_zoom(B, C, S, repeats):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    seg = torch.randint(0, 5, (B, C, S, S, S), device="cuda").float()
+    batch = {"vol": vol, "seg": seg}
+
+    ba_t = batchaug.RandZoomd(
+        keys=["vol", "seg"], prob=1.0,
+        min_zoom=0.8, max_zoom=1.2,
+        mode={"vol": "bilinear", "seg": "nearest"},
+    )
+    ba_ms = cuda_timer(lambda: ba_t(batch), repeats=repeats)
+
+    monai_t = monai.transforms.RandZoomd(
+        keys=["vol", "seg"], prob=1.0,
+        min_zoom=0.8, max_zoom=1.2,
+        mode=("bilinear", "nearest"),
+    )
+    monai_ms = cuda_timer(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol", "seg"]),
+        repeats=repeats,
+    )
+    return monai_ms, ba_ms
+
+
 # ---------------------------------------------------------------------------
 # Table printing
 # ---------------------------------------------------------------------------
@@ -322,9 +462,17 @@ BENCHMARKS = {
     "ScaleIntensityd (per element x channel) [vol]": bench_one_scale_intensity_cw,
     "ScaleIntensityd (per element, all channels) [vol]": bench_one_scale_intensity_global,
     "RandAxisFlipd [vol+seg]": bench_one_rand_axis_flip,
+    "RandFlipd (all axes) [vol+seg]": bench_one_rand_flip,
     "RandRotate90d [vol+seg]": bench_one_rand_rotate90,
+    "RandRotated [vol+seg]": bench_one_rand_rotate,
+    "RandZoomd [vol+seg]": bench_one_rand_zoom,
     "RandGaussianNoised [vol]": bench_one_rand_gaussian_noise,
+    "RandRicianNoised [vol]": bench_one_rand_rician_noise,
     "RandAdjustContrastd [vol]": bench_one_rand_adjust_contrast,
+    "RandScaleIntensityd [vol]": bench_one_rand_scale_intensity,
+    "RandShiftIntensityd [vol]": bench_one_rand_shift_intensity,
+    "RandStdShiftIntensityd [vol]": bench_one_rand_std_shift_intensity,
+    "RandScaleIntensityFixedMeand [vol]": bench_one_rand_scale_fixed_mean,
     "RandGaussianSmoothd [vol]": bench_one_rand_gaussian_smooth,
     "RandGaussianSharpend [vol]": bench_one_rand_gaussian_sharpen,
     "RandSimulateLowResolutiond [vol]": bench_one_rand_simulate_low_resolution,

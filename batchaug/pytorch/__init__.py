@@ -1,7 +1,9 @@
 from .geometric.affine import RandAffine, RandAffined
 from .geometric.elastic import Rand3DElastic, Rand3DElasticd
-from .geometric.flip import RandAxisFlip, RandAxisFlipd
+from .geometric.flip import RandAxisFlip, RandAxisFlipd, RandFlip, RandFlipd
+from .geometric.rotate import RandRotate, RandRotated
 from .geometric.rotate90 import RandRotate90, RandRotate90d
+from .geometric.zoom import RandZoom, RandZoomd
 from .intensity.bias_field import RandBiasField, RandBiasFieldd
 from .intensity.contrast import (
     RandAdjustContrast,
@@ -10,9 +12,24 @@ from .intensity.contrast import (
     ScaleIntensityd,
 )
 from .intensity.gibbs_noise import RandGibbsNoise, RandGibbsNoised
-from .intensity.noise import RandGaussianNoise, RandGaussianNoised
+from .intensity.noise import (
+    RandGaussianNoise,
+    RandGaussianNoised,
+    RandRicianNoise,
+    RandRicianNoised,
+)
 from .intensity.pad import DivisiblePad, DivisiblePadd
 from .intensity.resolution import RandSimulateLowResolution, RandSimulateLowResolutiond
+from .intensity.scale_shift import (
+    RandScaleIntensity,
+    RandScaleIntensityd,
+    RandScaleIntensityFixedMean,
+    RandScaleIntensityFixedMeand,
+    RandShiftIntensity,
+    RandShiftIntensityd,
+    RandStdShiftIntensity,
+    RandStdShiftIntensityd,
+)
 from .intensity.sharpen import RandGaussianSharpen, RandGaussianSharpend
 from .intensity.smooth import RandGaussianSmooth, RandGaussianSmoothd
 
@@ -27,20 +44,36 @@ __all__ = [
     "RandAxisFlipd",
     "RandBiasField",
     "RandBiasFieldd",
+    "RandFlip",
+    "RandFlipd",
     "RandGibbsNoise",
     "RandGibbsNoised",
     "ScaleIntensity",
     "ScaleIntensityd",
     "RandAdjustContrast",
     "RandAdjustContrastd",
-    "RandRotate90",
-    "RandRotate90d",
     "RandGaussianNoise",
     "RandGaussianNoised",
     "RandGaussianSmooth",
     "RandGaussianSmoothd",
     "RandGaussianSharpen",
     "RandGaussianSharpend",
+    "RandRicianNoise",
+    "RandRicianNoised",
+    "RandRotate",
+    "RandRotated",
+    "RandRotate90",
+    "RandRotate90d",
+    "RandScaleIntensity",
+    "RandScaleIntensityd",
+    "RandScaleIntensityFixedMean",
+    "RandScaleIntensityFixedMeand",
+    "RandShiftIntensity",
+    "RandShiftIntensityd",
     "RandSimulateLowResolution",
     "RandSimulateLowResolutiond",
+    "RandStdShiftIntensity",
+    "RandStdShiftIntensityd",
+    "RandZoom",
+    "RandZoomd",
 ]

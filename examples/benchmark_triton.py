@@ -4,8 +4,8 @@ Measures wall-clock time for each Triton-accelerated transform against
 its PyTorch counterpart. Only benchmarks apply() — sample_params excluded.
 
 Usage:
-    conda run -n interseg3d python examples/benchmark_triton.py 2>&1 | tee examples/benchmark_triton.log
-    conda run -n interseg3d python examples/benchmark_triton.py --spatial_sizes 64 128 256
+    conda run -n batchaug python examples/benchmark_triton.py 2>&1 | tee examples/benchmark_triton.log
+    conda run -n batchaug python examples/benchmark_triton.py --spatial_sizes 64 128 256
 """
 
 import argparse
@@ -26,6 +26,15 @@ from batchaug.pytorch.intensity.sharpen import (
 from batchaug.pytorch.intensity.bias_field import (
     RandBiasField as PTRandBiasField,
 )
+from batchaug.pytorch.intensity.scale_shift import (
+    RandScaleIntensity as PTRandScaleIntensity,
+    RandShiftIntensity as PTRandShiftIntensity,
+    RandStdShiftIntensity as PTRandStdShiftIntensity,
+    RandScaleIntensityFixedMean as PTRandScaleIntensityFixedMean,
+)
+from batchaug.pytorch.intensity.noise import (
+    RandRicianNoise as PTRandRicianNoise,
+)
 from batchaug.triton.intensity.contrast import (
     RandAdjustContrast as TRRandAdjustContrast,
     ScaleIntensity as TRScaleIntensity,
@@ -38,6 +47,15 @@ from batchaug.triton.intensity.sharpen import (
 )
 from batchaug.triton.intensity.bias_field import (
     RandBiasField as TRRandBiasField,
+)
+from batchaug.triton.intensity.scale_shift import (
+    RandScaleIntensity as TRRandScaleIntensity,
+    RandShiftIntensity as TRRandShiftIntensity,
+    RandStdShiftIntensity as TRRandStdShiftIntensity,
+    RandScaleIntensityFixedMean as TRRandScaleIntensityFixedMean,
+)
+from batchaug.triton.intensity.rician_noise import (
+    RandRicianNoise as TRRandRicianNoise,
 )
 
 
@@ -106,6 +124,16 @@ def main():
         ("ScaleIntensity", PTScaleIntensity, TRScaleIntensity, {}),
         ("RandAdjustContrast", PTRandAdjustContrast, TRRandAdjustContrast,
          {"gamma": (0.5, 2.5)}),
+        ("RandScaleIntensity", PTRandScaleIntensity, TRRandScaleIntensity,
+         {"factors": (-0.5, 0.5)}),
+        ("RandShiftIntensity", PTRandShiftIntensity, TRRandShiftIntensity,
+         {"offsets": (-0.3, 0.3)}),
+        ("RandStdShiftIntensity", PTRandStdShiftIntensity, TRRandStdShiftIntensity,
+         {"factors": (-3.0, 3.0)}),
+        ("RandScaleFixedMean", PTRandScaleIntensityFixedMean, TRRandScaleIntensityFixedMean,
+         {"factors": (-0.5, 0.5)}),
+        ("RandRicianNoise", PTRandRicianNoise, TRRandRicianNoise,
+         {"std": 0.1}),
         ("RandGaussianSmooth", PTRandGaussianSmooth, TRRandGaussianSmooth,
          {"sigma_x": (0.5, 1.5), "sigma_y": (0.5, 1.5), "sigma_z": (0.5, 1.5)}),
         ("RandGaussianSharpen", PTRandGaussianSharpen, TRRandGaussianSharpen, {}),

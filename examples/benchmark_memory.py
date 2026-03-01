@@ -4,9 +4,9 @@ Measures the peak memory *allocated* during a single forward pass
 (excluding the input tensors themselves).
 
 Usage:
-    conda run -n interseg3d python examples/benchmark_memory.py 2>&1 | tee benchmark_memory.log
-    conda run -n interseg3d python examples/benchmark_memory.py --batch_size 4
-    conda run -n interseg3d python examples/benchmark_memory.py --spatial_sizes 64 128 --channels 1 4
+    conda run -n batchaug python examples/benchmark_memory.py 2>&1 | tee examples/benchmark_memory.log
+    conda run -n batchaug python examples/benchmark_memory.py --batch_size 4
+    conda run -n batchaug python examples/benchmark_memory.py --spatial_sizes 64 128 --channels 1 4
 """
 
 import argparse
@@ -376,6 +376,181 @@ def bench_one_divisible_pad(B, C, S):
     return monai_mb, ba_mb, in_mb
 
 
+def bench_one_rand_scale_intensity(B, C, S):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    batch = {"vol": vol}
+    in_mb = input_size_mb(B, C, S, n_tensors=1)
+
+    ba_t = batchaug.RandScaleIntensityd(keys=["vol"], prob=1.0, factors=0.5)
+    ba_t(batch)
+    ba_mb = measure_peak_mb(lambda: ba_t(batch))
+
+    monai_t = monai.transforms.RandScaleIntensityd(keys=["vol"], prob=1.0, factors=0.5)
+    monai_per_sample_loop(monai_t, batch, ["vol"])
+    monai_mb = measure_peak_mb(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol"])
+    )
+
+    del vol, batch
+    torch.cuda.empty_cache()
+    return monai_mb, ba_mb, in_mb
+
+
+def bench_one_rand_shift_intensity(B, C, S):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    batch = {"vol": vol}
+    in_mb = input_size_mb(B, C, S, n_tensors=1)
+
+    ba_t = batchaug.RandShiftIntensityd(keys=["vol"], prob=1.0, offsets=0.3)
+    ba_t(batch)
+    ba_mb = measure_peak_mb(lambda: ba_t(batch))
+
+    monai_t = monai.transforms.RandShiftIntensityd(keys=["vol"], prob=1.0, offsets=0.3)
+    monai_per_sample_loop(monai_t, batch, ["vol"])
+    monai_mb = measure_peak_mb(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol"])
+    )
+
+    del vol, batch
+    torch.cuda.empty_cache()
+    return monai_mb, ba_mb, in_mb
+
+
+def bench_one_rand_std_shift_intensity(B, C, S):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    batch = {"vol": vol}
+    in_mb = input_size_mb(B, C, S, n_tensors=1)
+
+    ba_t = batchaug.RandStdShiftIntensityd(keys=["vol"], prob=1.0, factors=3.0)
+    ba_t(batch)
+    ba_mb = measure_peak_mb(lambda: ba_t(batch))
+
+    monai_t = monai.transforms.RandStdShiftIntensityd(keys=["vol"], prob=1.0, factors=3.0)
+    monai_per_sample_loop(monai_t, batch, ["vol"])
+    monai_mb = measure_peak_mb(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol"])
+    )
+
+    del vol, batch
+    torch.cuda.empty_cache()
+    return monai_mb, ba_mb, in_mb
+
+
+def bench_one_rand_scale_intensity_fixed_mean(B, C, S):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    batch = {"vol": vol}
+    in_mb = input_size_mb(B, C, S, n_tensors=1)
+
+    ba_t = batchaug.RandScaleIntensityFixedMeand(keys=["vol"], prob=1.0, factors=0.5)
+    ba_t(batch)
+    ba_mb = measure_peak_mb(lambda: ba_t(batch))
+
+    monai_t = monai.transforms.RandScaleIntensityFixedMeand(keys=["vol"], prob=1.0, factors=0.5)
+    monai_per_sample_loop(monai_t, batch, ["vol"])
+    monai_mb = measure_peak_mb(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol"])
+    )
+
+    del vol, batch
+    torch.cuda.empty_cache()
+    return monai_mb, ba_mb, in_mb
+
+
+def bench_one_rand_rician_noise(B, C, S):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    batch = {"vol": vol}
+    in_mb = input_size_mb(B, C, S, n_tensors=1)
+
+    ba_t = batchaug.RandRicianNoised(keys=["vol"], prob=1.0, std=0.1)
+    ba_t(batch)
+    ba_mb = measure_peak_mb(lambda: ba_t(batch))
+
+    monai_t = monai.transforms.RandRicianNoised(keys=["vol"], prob=1.0, std=0.1)
+    monai_per_sample_loop(monai_t, batch, ["vol"])
+    monai_mb = measure_peak_mb(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol"])
+    )
+
+    del vol, batch
+    torch.cuda.empty_cache()
+    return monai_mb, ba_mb, in_mb
+
+
+def bench_one_rand_flip(B, C, S):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    seg = torch.randint(0, 5, (B, C, S, S, S), device="cuda").float()
+    batch = {"vol": vol, "seg": seg}
+    in_mb = input_size_mb(B, C, S, n_tensors=2)
+
+    ba_t = batchaug.RandFlipd(keys=["vol", "seg"], prob=1.0)
+    ba_t(batch)
+    ba_mb = measure_peak_mb(lambda: ba_t(batch))
+
+    monai_t = monai.transforms.RandFlipd(keys=["vol", "seg"], prob=1.0, spatial_axis=None)
+    monai_per_sample_loop(monai_t, batch, ["vol", "seg"])
+    monai_mb = measure_peak_mb(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol", "seg"])
+    )
+
+    del vol, seg, batch
+    torch.cuda.empty_cache()
+    return monai_mb, ba_mb, in_mb
+
+
+def bench_one_rand_rotate(B, C, S):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    seg = torch.randint(0, 5, (B, C, S, S, S), device="cuda").float()
+    batch = {"vol": vol, "seg": seg}
+    in_mb = input_size_mb(B, C, S, n_tensors=2)
+
+    ba_t = batchaug.RandRotated(
+        keys=["vol", "seg"], prob=1.0, range_x=0.3,
+        mode={"vol": "bilinear", "seg": "nearest"},
+    )
+    ba_t(batch)
+    ba_mb = measure_peak_mb(lambda: ba_t(batch))
+
+    monai_t = monai.transforms.RandRotated(
+        keys=["vol", "seg"], prob=1.0, range_x=0.3,
+        mode=("bilinear", "nearest"), padding_mode="border",
+    )
+    monai_per_sample_loop(monai_t, batch, ["vol", "seg"])
+    monai_mb = measure_peak_mb(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol", "seg"])
+    )
+
+    del vol, seg, batch
+    torch.cuda.empty_cache()
+    return monai_mb, ba_mb, in_mb
+
+
+def bench_one_rand_zoom(B, C, S):
+    vol = torch.rand(B, C, S, S, S, device="cuda")
+    seg = torch.randint(0, 5, (B, C, S, S, S), device="cuda").float()
+    batch = {"vol": vol, "seg": seg}
+    in_mb = input_size_mb(B, C, S, n_tensors=2)
+
+    ba_t = batchaug.RandZoomd(
+        keys=["vol", "seg"], prob=1.0, min_zoom=0.8, max_zoom=1.2,
+        mode={"vol": "bilinear", "seg": "nearest"},
+    )
+    ba_t(batch)
+    ba_mb = measure_peak_mb(lambda: ba_t(batch))
+
+    monai_t = monai.transforms.RandZoomd(
+        keys=["vol", "seg"], prob=1.0, min_zoom=0.8, max_zoom=1.2,
+        mode=("bilinear", "nearest"), keep_size=True, padding_mode="edge",
+    )
+    monai_per_sample_loop(monai_t, batch, ["vol", "seg"])
+    monai_mb = measure_peak_mb(
+        lambda: monai_per_sample_loop(monai_t, batch, ["vol", "seg"])
+    )
+
+    del vol, seg, batch
+    torch.cuda.empty_cache()
+    return monai_mb, ba_mb, in_mb
+
+
 # ---------------------------------------------------------------------------
 # Table printing
 # ---------------------------------------------------------------------------
@@ -395,6 +570,14 @@ BENCHMARKS = {
     "RandAffined [vol+seg]": bench_one_rand_affine,
     "Rand3DElasticd [vol+seg]": bench_one_rand_3d_elastic,
     "DivisiblePadd [vol+seg]": bench_one_divisible_pad,
+    "RandScaleIntensityd [vol]": bench_one_rand_scale_intensity,
+    "RandShiftIntensityd [vol]": bench_one_rand_shift_intensity,
+    "RandStdShiftIntensityd [vol]": bench_one_rand_std_shift_intensity,
+    "RandScaleIntensityFixedMeand [vol]": bench_one_rand_scale_intensity_fixed_mean,
+    "RandRicianNoised [vol]": bench_one_rand_rician_noise,
+    "RandFlipd [vol+seg]": bench_one_rand_flip,
+    "RandRotated [vol+seg]": bench_one_rand_rotate,
+    "RandZoomd [vol+seg]": bench_one_rand_zoom,
 }
 
 
