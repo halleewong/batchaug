@@ -2,7 +2,7 @@
 
 ## Overview
 
-BatchAug provides 13 transforms (each with a dict variant `*d`) and a `Compose` class with optional lazy geometric fusion.
+BatchAug provides 21 transforms (each with a dict variant `*d`) and a `Compose` class with optional lazy geometric fusion.
 
 **Input shape**: `(B, C, H, W, D)` — batch, channels, 3 spatial dims.
 
@@ -12,14 +12,22 @@ BatchAug provides 13 transforms (each with a dict variant `*d`) and a `Compose` 
 |---|---|:---:|---|---|
 | `RandRotate90d` | Geometric | Yes | vol + seg | `prob`, `max_k`, `spatial_axes` |
 | `RandAxisFlipd` | Geometric | Yes | vol + seg | `prob` |
+| `RandFlipd` | Geometric | Yes | vol + seg | `prob`, `spatial_axis` |
+| `RandRotated` | Geometric | Yes | vol + seg | `prob`, `range_x`, `range_y`, `range_z`, `mode` |
 | `RandAffined` | Geometric | Yes | vol + seg | `prob`, `rotate_range`, `shear_range`, `translate_range`, `scale_range`, `mode` |
+| `RandZoomd` | Geometric | Yes | vol + seg | `prob`, `min_zoom`, `max_zoom`, `mode` |
 | `Rand3DElasticd` | Geometric | No | vol + seg | `prob`, `sigma_range`, `magnitude_range`, `mode` |
 | `DivisiblePadd` | Utility | No | vol + seg | `k`, `method`, `mode` |
 | `RandSimulateLowResolutiond` | Intensity | No | vol only | `prob`, `zoom_range` |
 | `RandGaussianNoised` | Intensity | No | vol only | `prob`, `mean`, `std` |
+| `RandRicianNoised` | Intensity | No | vol only | `prob`, `mean`, `std`, `relative`, `sample_std` |
 | `RandBiasFieldd` | Intensity | No | vol only | `prob`, `degree`, `coeff_range` |
 | `RandGibbsNoised` | Intensity | No | vol only | `prob`, `alpha` |
 | `RandAdjustContrastd` | Intensity | No | vol only | `prob`, `gamma` |
+| `RandScaleIntensityd` | Intensity | No | vol only | `prob`, `factors` |
+| `RandScaleIntensityFixedMeand` | Intensity | No | vol only | `prob`, `factors`, `channel_wise` |
+| `RandShiftIntensityd` | Intensity | No | vol only | `prob`, `offsets`, `safe` |
+| `RandStdShiftIntensityd` | Intensity | No | vol only | `prob`, `factors`, `nonzero`, `channel_wise` |
 | `RandGaussianSmoothd` | Intensity | No | vol only | `prob`, `sigma_x`, `sigma_y`, `sigma_z` |
 | `RandGaussianSharpend` | Intensity | No | vol only | `prob`, `sigma1_*`, `sigma2_*`, `alpha` |
 | `ScaleIntensityd` | Intensity | No | vol only | `minv`, `maxv`, `factor`, `channel_wise` |
@@ -50,6 +58,28 @@ Flip along a randomly chosen spatial axis.
 |---|---|---|---|
 | `prob` | float | 0.1 | Per-element probability |
 
+### RandFlip / RandFlipd
+
+Flip along specified spatial axes (all at once). Unlike `RandAxisFlip` which picks one random axis, `RandFlip` flips ALL specified axes simultaneously when activated.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `prob` | float | 0.1 | Per-element probability |
+| `spatial_axis` | int / list / None | None | Axes to flip. None = all spatial axes |
+
+### RandRotate / RandRotated
+
+Arbitrary-angle rotation. Simplified API wrapping `RandAffine` with only rotation enabled.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `prob` | float | 0.1 | Per-element probability |
+| `range_x` | float / tuple | 0.0 | Rotation range around X (H-W plane), radians |
+| `range_y` | float / tuple | 0.0 | Rotation range around Y (H-D plane) |
+| `range_z` | float / tuple | 0.0 | Rotation range around Z (W-D plane) |
+| `mode` | str / dict | "bilinear" | Interpolation mode |
+| `padding_mode` | str / dict | "border" | Padding mode |
+
 ### RandAffine / RandAffined
 
 Full affine: rotation + shear + translation + scale via `F.affine_grid` + `F.grid_sample`. Composition order: `I @ R @ Sh @ T @ Sc` (same as MONAI).
@@ -63,6 +93,18 @@ Full affine: rotation + shear + translation + scale via `F.affine_grid` + `F.gri
 | `scale_range` | float / tuple | None | Scale factor range (added to 1.0) |
 | `mode` | str / dict | "bilinear" | Interpolation mode. Dict variant supports per-key (e.g. bilinear for vol, nearest for seg) |
 | `padding_mode` | str / dict | "zeros" | Padding mode. Same per-key support |
+
+### RandZoom / RandZoomd
+
+Random isotropic zoom (keep_size=True). A zoom factor `z ~ U(min_zoom, max_zoom)` is sampled per element. `z > 1` zooms in, `z < 1` zooms out.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `prob` | float | 0.1 | Per-element probability |
+| `min_zoom` | float | 0.9 | Lower bound of zoom factor (must be > 0) |
+| `max_zoom` | float | 1.1 | Upper bound of zoom factor |
+| `mode` | str / dict | "bilinear" | Interpolation mode |
+| `padding_mode` | str / dict | "border" | Padding mode |
 
 ### Rand3DElastic / Rand3DElasticd
 
@@ -113,6 +155,18 @@ Additive Gaussian noise. Noise tensor is pre-generated in `sample_params` so dic
 | `mean` | float / tuple | 0.0 | Fixed mean or (low, high) range sampled per element |
 | `std` | float / tuple | 0.1 | Fixed std or (low, high) range sampled per element |
 
+### RandRicianNoise / RandRicianNoised
+
+Rician-distributed noise (MRI magnitude artifact model). Formula: `output = sqrt((input + n1)^2 + n2^2)` where `n1, n2 ~ N(mean, std^2)`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `prob` | float | 0.1 | Per-element probability |
+| `mean` | float | 0.0 | Mean of both Gaussian noise components |
+| `std` | float | 0.1 | Noise std (or upper bound if `sample_std=True`) |
+| `relative` | bool | False | If True, multiply std by per-element signal std |
+| `sample_std` | bool | True | If True, sample `noise_std ~ U(0, std)` per element |
+
 ### RandBiasField / RandBiasFieldd
 
 Multiplicative polynomial bias field (Legendre basis), simulating MRI inhomogeneity. Applied as `out = img * exp(field)`.
@@ -140,6 +194,46 @@ Random gamma correction: `((x - min) / range) ^ gamma * range + min`.
 |---|---|---|---|
 | `prob` | float | 0.1 | Per-element probability |
 | `gamma` | tuple(float,float) | (0.5, 4.5) | Gamma range sampled per element |
+
+### RandScaleIntensity / RandScaleIntensityd
+
+Multiply each batch element by a random factor. Formula: `output = input * (1 + factor)` where `factor ~ U(factors[0], factors[1])`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `prob` | float | 0.1 | Per-element probability |
+| `factors` | float / tuple | (0.0, 0.5) | Scale factor range. Scalar `f` → `(-f, f)` |
+
+### RandScaleIntensityFixedMean / RandScaleIntensityFixedMeand
+
+Scale intensity while preserving the mean. Formula: `output = mean + (input - mean) * (1 + factor)`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `prob` | float | 0.1 | Per-element probability |
+| `factors` | float / tuple | (-0.5, 0.5) | Scale factor range. Scalar `f` → `(-f, f)` |
+| `channel_wise` | bool | False | Compute mean independently per channel |
+
+### RandShiftIntensity / RandShiftIntensityd
+
+Add a random offset. Formula: `output = input + offset` where `offset ~ U(offsets[0], offsets[1])`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `prob` | float | 0.1 | Per-element probability |
+| `offsets` | float / tuple | (-0.1, 0.1) | Offset range. Scalar `f` → `(-f, f)` |
+| `safe` | bool | False | If True, clamp result to [0, 1] |
+
+### RandStdShiftIntensity / RandStdShiftIntensityd
+
+Shift by a random multiple of per-element standard deviation. Formula: `output = input + factor * std(input)`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `prob` | float | 0.1 | Per-element probability |
+| `factors` | float / tuple | (-3.0, 3.0) | Factor range. Scalar `f` → `(-f, f)` |
+| `nonzero` | bool | False | Compute std only from non-zero voxels |
+| `channel_wise` | bool | False | Compute std independently per channel |
 
 ### RandGaussianSmooth / RandGaussianSmoothd
 
@@ -192,8 +286,8 @@ When `lazy=True`, consecutive geometric transforms (those with `to_affine`) are 
 
 ```
 Rot90 → Flip → Affine → Elastic → LowRes → Noise → Bias → Gibbs → Contrast → Smooth → Sharpen → Scale
-├── geometric (fused) ──┤    ├   ├──────────────── intensity (sequential) ───────────────────────┤
-                              └── not fusible, breaks lazy chain
+├── geometric (fused) ──┤      ├   ├──────────────── intensity (sequential) ───────────────────────┤
+                               └── not fusible, breaks lazy chain
 ```
 
 This gives **one interpolation pass** for all geometric transforms instead of three separate ones.
