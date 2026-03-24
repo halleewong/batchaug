@@ -2,7 +2,7 @@
 
 ## Overview
 
-BatchAug provides 21 transforms (each with a dict variant `*d`) and a `Compose` class with optional lazy geometric fusion.
+BatchAug provides 22 transforms (each with a dict variant `*d`) and a `Compose` class with optional lazy geometric fusion.
 
 **Input shape**: `(B, C, H, W, D)` — batch, channels, 3 spatial dims.
 
@@ -19,6 +19,7 @@ BatchAug provides 21 transforms (each with a dict variant `*d`) and a `Compose` 
 | `Rand3DElasticd` | Geometric | No | vol + seg | `prob`, `sigma_range`, `magnitude_range`, `mode` |
 | `DivisiblePadd` | Utility | No | vol + seg | `k`, `method`, `mode` |
 | `RandSimulateLowResolutiond` | Intensity | No | vol only | `prob`, `zoom_range` |
+| `RandConvd` | Intensity | No | vol only | `prob`, `kernel_sizes`, `mixing`, `distribution`, `rand_bias` |
 | `RandGaussianNoised` | Intensity | No | vol only | `prob`, `mean`, `std` |
 | `RandRicianNoised` | Intensity | No | vol only | `prob`, `mean`, `std`, `relative`, `sample_std` |
 | `RandBiasFieldd` | Intensity | No | vol only | `prob`, `degree`, `coeff_range` |
@@ -144,6 +145,24 @@ Simulates low scanner resolution by downsampling then upsampling. Requires two r
 | `zoom_range` | tuple(float,float) | (0.5, 1.0) | Scalar zoom factor range. 0.33 = 3x downsampling |
 | `downsample_mode` | str | "nearest" | `F.interpolate` mode for downsampling |
 | `upsample_mode` | str | "trilinear" | `F.interpolate` mode for upsampling |
+
+### RandConv / RandConvd
+
+Random convolution augmentation. Perturbs low-level texture and colour statistics while preserving spatial structure by passing each volume through a conv layer with freshly randomized weights. Based on Xu et al. "Robust and Generalizable Visual Representation Learning via Random Convolutions" (ICLR 2021).
+
+Each batch element receives its own independent random kernel. The kernel is applied to each channel separately with no cross-channel mixing (depthwise-style): the same scalar-input kernel is shared across all channels within a batch element. The grouped convolution trick (`groups=B*C`) processes all batch elements and channels in a single CUDA call.
+
+Two modes:
+- **RC_img** (`mixing=False`): replace input with conv output entirely.
+- **RC_mix** (`mixing=True`): blend input and conv output — `alpha * randconv(x) + (1 - alpha) * x` where `alpha ~ U(0, 1)` per element.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `prob` | float | 0.5 | Per-element probability |
+| `kernel_sizes` | int / list[int] | 3 | Kernel size(s) to sample from uniformly each call |
+| `mixing` | bool | False | Enable RC_mix blending mode |
+| `distribution` | str | "kaiming_normal" | Weight init: `"kaiming_normal"`, `"kaiming_uniform"`, or `"xavier_normal"` |
+| `rand_bias` | bool | False | Also randomise the conv bias |
 
 ### RandGaussianNoise / RandGaussianNoised
 

@@ -52,6 +52,20 @@ Several transforms pre-generate large tensors in `sample_params()` so they are s
 | RandGibbsNoise | k-space mask `(B,1,H,W,D)` | Same truncation for all keys |
 | Rand3DElastic | deformed grid `(B,H,W,D,3)` | Same deformation for all keys |
 
+### RandAffine range parameters
+
+`rotate_range`, `shear_range`, `translate_range`, and `scale_range` all follow the same sampling convention via `_sample_range()`:
+
+| Input type | Sampling behaviour |
+|------------|-------------------|
+| `scalar r` | Uniform from `[-r, +r]` |
+| `(low, high)` tuple | Uniform from `[low, high]` |
+| List of scalars/tuples | One entry per spatial axis, each sampled independently |
+
+A plain scalar is therefore **not** a fixed value — it defines a symmetric range. For example, `translate_range=5` samples a translation in `[-5, 5]` voxels independently for each of the 3 spatial axes. To fix a parameter, pass `0` (scalar) or a zero-width tuple `(v, v)`.
+
+Units: `rotate_range` is in radians, `shear_range` is dimensionless, `translate_range` is in voxels, `scale_range` is an offset added to 1.0 (so `scale_range=0.1` gives scale factors in `[0.9, 1.1]`).
+
 ### Probability mask
 
 Every `BatchTransform` samples a boolean mask `(B,)` where each element is independently drawn from Bernoulli(`prob`). Elements where `mask=False` are left unchanged via `torch.where`.

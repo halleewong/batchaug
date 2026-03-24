@@ -44,6 +44,8 @@ _TRANSFORM_NAMES = [
     "RandSimulateLowResolutiond",
     "RandStdShiftIntensity",
     "RandStdShiftIntensityd",
+    "RandConv",
+    "RandConvd",
     "RandZoom",
     "RandZoomd",
 ]

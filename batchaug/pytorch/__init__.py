@@ -30,6 +30,7 @@ from .intensity.scale_shift import (
     RandStdShiftIntensity,
     RandStdShiftIntensityd,
 )
+from .intensity.randconv import RandConv, RandConvd
 from .intensity.sharpen import RandGaussianSharpen, RandGaussianSharpend
 from .intensity.smooth import RandGaussianSmooth, RandGaussianSmoothd
 
@@ -74,6 +75,8 @@ __all__ = [
     "RandSimulateLowResolutiond",
     "RandStdShiftIntensity",
     "RandStdShiftIntensityd",
+    "RandConv",
+    "RandConvd",
     "RandZoom",
     "RandZoomd",
 ]

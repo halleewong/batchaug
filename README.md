@@ -135,6 +135,7 @@ BatchAug includes two backends: a pure **PyTorch** backend and a **Triton** back
 | `RandBiasField` | Triton | On-the-fly Legendre polynomial eval avoids large basis tensor (3–10x faster) |
 | `RandGaussianSmooth` | PyTorch | cuDNN's conv3d is faster than custom Triton separable conv |
 | `RandGaussianSharpen` | PyTorch | Uses smooth internally, same cuDNN advantage |
+| `RandConv` | PyTorch | Grouped conv trick is already a single cuDNN call; Triton not expected to help |
 | All others | PyTorch | Already use optimized CUDA ops (cuFFT, grid_sample, etc.) |
 
 This happens transparently — `batchaug.ScaleIntensity` resolves to the Triton version, while `batchaug.RandGaussianSmooth` resolves to the PyTorch version. You can override:
@@ -200,6 +201,7 @@ The Triton backend provides additional speedups over the PyTorch backend for sel
 |-----------|-------------|-------------|
 | `RandAdjustContrast` | `RandAdjustContrastd` | Gamma correction |
 | `RandBiasField` | `RandBiasFieldd` | Polynomial bias field |
+| `RandConv` | `RandConvd` | Random convolution (texture/colour perturbation via Xu et al., ICLR 2021) |
 | `RandGaussianNoise` | `RandGaussianNoised` | Additive Gaussian noise with per-element mean/std |
 | `RandGaussianSharpen` | `RandGaussianSharpend` | Unsharp masking |
 | `RandGaussianSmooth` | `RandGaussianSmoothd` | Separable Gaussian blur |
