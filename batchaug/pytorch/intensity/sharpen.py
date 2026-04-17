@@ -33,6 +33,7 @@ class RandGaussianSharpen(BatchTransform):
         sigma2_y: float | tuple[float, float] = 0.5,
         sigma2_z: float | tuple[float, float] = 0.5,
         alpha: tuple[float, float] = (10.0, 30.0),
+        padding_mode: str | None = None,
     ):
         super().__init__(prob=prob)
         self.sigma1_x = sigma1_x
@@ -42,6 +43,7 @@ class RandGaussianSharpen(BatchTransform):
         self.sigma2_y = sigma2_y
         self.sigma2_z = sigma2_z
         self.alpha = alpha
+        self.padding_mode = padding_mode
 
     @staticmethod
     def _sample_sigma(
@@ -118,12 +120,14 @@ class RandGaussianSharpen(BatchTransform):
             params["kernel1_h"],
             params["kernel1_w"],
             params["kernel1_d"],
+            padding_mode=self.padding_mode,
         )
         double_blurred = separable_gaussian_conv3d(
             blurred,
             params["kernel2_h"],
             params["kernel2_w"],
             params["kernel2_d"],
+            padding_mode=self.padding_mode,
         )
 
         result = blurred + alpha.to(blurred.dtype) * (blurred - double_blurred)
@@ -149,6 +153,7 @@ class RandGaussianSharpend(BatchDictTransform):
         sigma2_y: float | tuple[float, float] = 0.5,
         sigma2_z: float | tuple[float, float] = 0.5,
         alpha: tuple[float, float] = (10.0, 30.0),
+        padding_mode: str | None = None,
     ):
         transform = RandGaussianSharpen(
             prob=prob,
@@ -159,5 +164,6 @@ class RandGaussianSharpend(BatchDictTransform):
             sigma2_y=sigma2_y,
             sigma2_z=sigma2_z,
             alpha=alpha,
+            padding_mode=padding_mode,
         )
         super().__init__(keys=keys, transform=transform)

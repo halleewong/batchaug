@@ -39,12 +39,14 @@ def separable_gaussian_conv3d(
     kernel_h: torch.Tensor,
     kernel_w: torch.Tensor,
     kernel_d: torch.Tensor,
+    padding_mode: str | None = None,
 ) -> torch.Tensor:
     """Apply separable 3D Gaussian blur using grouped conv3d.
 
     Args:
         tensor: (B, C, H, W, D).
         kernel_h, kernel_w, kernel_d: (B, K_*) per-element 1D kernels.
+        padding_mode: 'reflect', 'replicate', 'constant' (zero), or None (no explicit padding).
 
     Returns:
         (B, C, H, W, D) blurred tensor.
@@ -56,6 +58,22 @@ def separable_gaussian_conv3d(
 
     for kernel, axis in [(kernel_h, 0), (kernel_w, 1), (kernel_d, 2)]:
         K = kernel.shape[1]
+        pad_size = K // 2
+
+        # Apply explicit padding if requested, otherwise use implicit zero-padding
+        if padding_mode is not None:
+            # F.pad pads from last dimension backwards: (D_left, D_right, W_top, W_bottom, H_front, H_back)
+            if axis == 0:  # H axis
+                x = F.pad(x, (0, 0, 0, 0, pad_size, pad_size), mode=padding_mode)
+            elif axis == 1:  # W axis
+                x = F.pad(x, (0, 0, pad_size, pad_size, 0, 0), mode=padding_mode)
+            else:  # D axis
+                x = F.pad(x, (pad_size, pad_size, 0, 0, 0, 0), mode=padding_mode)
+            conv_padding = 0
+        else:
+            # Use implicit zero-padding in conv3d
+            conv_padding = pad_size
+
         # Repeat each element's kernel C times → (B*C, K)
         w = kernel.repeat_interleave(C, dim=0)
         weight_shape = [B * C, 1, 1, 1, 1]
@@ -63,8 +81,8 @@ def separable_gaussian_conv3d(
         w = w.reshape(weight_shape)  # already float32
 
         padding = [0, 0, 0]
-        padding[axis] = K // 2
-
+        if padding_mode is None:
+            padding[axis] = pad_size
         x = F.conv3d(x, w, padding=padding, groups=B * C)
 
     return x.reshape(tensor.shape).to(out_dtype)
@@ -86,11 +104,13 @@ class RandGaussianSmooth(BatchTransform):
         sigma_x: tuple[float, float] = (0.25, 1.5),
         sigma_y: tuple[float, float] = (0.25, 1.5),
         sigma_z: tuple[float, float] = (0.25, 1.5),
+        padding_mode: str | None = None,
     ):
         super().__init__(prob=prob)
         self.sigma_x = sigma_x
         self.sigma_y = sigma_y
         self.sigma_z = sigma_z
+        self.padding_mode = padding_mode
 
     @staticmethod
     def _sample_sigma(
@@ -116,7 +136,8 @@ class RandGaussianSmooth(BatchTransform):
     def apply(self, tensor: torch.Tensor, params: dict) -> torch.Tensor:
         mask = params["mask"]
         result = separable_gaussian_conv3d(
-            tensor, params["kernel_h"], params["kernel_w"], params["kernel_d"]
+            tensor, params["kernel_h"], params["kernel_w"], params["kernel_d"],
+            padding_mode=self.padding_mode
         )
         mask_5d = mask[:, None, None, None, None]
         return torch.where(mask_5d, result, tensor)
@@ -135,8 +156,10 @@ class RandGaussianSmoothd(BatchDictTransform):
         sigma_x: tuple[float, float] = (0.25, 1.5),
         sigma_y: tuple[float, float] = (0.25, 1.5),
         sigma_z: tuple[float, float] = (0.25, 1.5),
+        padding_mode: str | None = None,
     ):
         transform = RandGaussianSmooth(
-            prob=prob, sigma_x=sigma_x, sigma_y=sigma_y, sigma_z=sigma_z
+            prob=prob, sigma_x=sigma_x, sigma_y=sigma_y, sigma_z=sigma_z,
+            padding_mode=padding_mode
         )
         super().__init__(keys=keys, transform=transform)

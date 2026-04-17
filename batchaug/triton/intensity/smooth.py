@@ -9,7 +9,10 @@ from ..kernels.separable_conv import separable_gaussian_conv3d_triton
 
 
 class RandGaussianSmooth(_PTRandGaussianSmooth):
-    """Triton-accelerated RandGaussianSmooth (same API as PyTorch version)."""
+    """Triton-accelerated RandGaussianSmooth (same API as PyTorch version).
+
+    Note: Triton kernel only supports zero-padding; padding_mode is ignored.
+    """
 
     def apply(self, tensor: torch.Tensor, params: dict) -> torch.Tensor:
         mask = params["mask"]
@@ -30,8 +33,10 @@ class RandGaussianSmoothd(BatchDictTransform):
         sigma_x: tuple[float, float] = (0.25, 1.5),
         sigma_y: tuple[float, float] = (0.25, 1.5),
         sigma_z: tuple[float, float] = (0.25, 1.5),
+        padding_mode: str | None = None,
     ):
         transform = RandGaussianSmooth(
-            prob=prob, sigma_x=sigma_x, sigma_y=sigma_y, sigma_z=sigma_z
+            prob=prob, sigma_x=sigma_x, sigma_y=sigma_y, sigma_z=sigma_z,
+            padding_mode=padding_mode
         )
         super().__init__(keys=keys, transform=transform)

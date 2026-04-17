@@ -12,6 +12,7 @@ class RandGaussianSharpen(_PTRandGaussianSharpen):
     """Triton-accelerated RandGaussianSharpen (same API as PyTorch version).
 
     Uses Triton separable convolution for both blur passes.
+    Note: Triton kernel only supports zero-padding; padding_mode is ignored.
     """
 
     def apply(self, tensor: torch.Tensor, params: dict) -> torch.Tensor:
@@ -51,6 +52,7 @@ class RandGaussianSharpend(BatchDictTransform):
         sigma2_y: float | tuple[float, float] = 0.5,
         sigma2_z: float | tuple[float, float] = 0.5,
         alpha: tuple[float, float] = (10.0, 30.0),
+        padding_mode: str | None = None,
     ):
         transform = RandGaussianSharpen(
             prob=prob,
@@ -61,5 +63,6 @@ class RandGaussianSharpend(BatchDictTransform):
             sigma2_y=sigma2_y,
             sigma2_z=sigma2_z,
             alpha=alpha,
+            padding_mode=padding_mode,
         )
         super().__init__(keys=keys, transform=transform)
