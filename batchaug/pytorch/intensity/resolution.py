@@ -18,6 +18,31 @@ class RandSimulateLowResolution(BatchTransform):
     processed together via ``F.interpolate``.
 
     Input shape: (B, C, H, W, D).
+
+    Note:
+        ``downsample_mode`` and ``upsample_mode`` are independent and accept any
+        mode supported by ``torch.nn.functional.interpolate`` (``"nearest"``,
+        ``"nearest-exact"``, ``"trilinear"``, ``"area"``, …). ``align_corners``
+        is automatically applied to whichever step uses a mode that supports it.
+
+        The defaults (``downsample_mode="nearest"``, ``upsample_mode="trilinear"``,
+        ``align_corners=False``) match MONAI's ``RandSimulateLowResolution``, but
+        produce a spatial shift of roughly +½ pixel toward +H/+W/+D. The cause is
+        that ``mode="nearest"`` uses a corner-aligned indexing convention while
+        ``trilinear`` with ``align_corners=False`` uses a cell-centered one, so
+        the two steps don't compose cleanly.
+
+        Recommended overrides:
+
+        * ``downsample_mode="nearest-exact"`` — also cell-centered, so the
+          conventions match. Reduces the shift to <0.02 px for zoom factors of
+          0.6–0.9. Worst case is exactly zoom=0.5, where nearest quantization
+          still leaves a -0.5 px residual.
+        * ``downsample_mode="trilinear"`` — true cell-centered downsample, ~0
+          shift at all zoom factors. Smoother result, so it no longer behaves
+          like a true "nearest" resample.
+        * ``downsample_mode="area"`` — area-averaged (anti-aliased) downsample,
+          ~0 shift at all zoom factors. Similar trade-off to ``"trilinear"``.
     """
 
     _ALIGN_CORNERS_MODES = {"linear", "bilinear", "trilinear", "bicubic"}
@@ -78,7 +103,10 @@ class RandSimulateLowResolution(BatchTransform):
             ts = unique_targets[i].tolist()
             subset = tensor[group_global]
 
-            down = F.interpolate(subset, size=ts, mode=self.downsample_mode)
+            down_kwargs: dict = {"size": ts, "mode": self.downsample_mode}
+            if self.downsample_mode in self._ALIGN_CORNERS_MODES:
+                down_kwargs["align_corners"] = self.align_corners
+            down = F.interpolate(subset, **down_kwargs)
 
             up_kwargs: dict = {"size": spatial_shape, "mode": self.upsample_mode}
             if self.upsample_mode in self._ALIGN_CORNERS_MODES:
@@ -94,6 +122,9 @@ class RandSimulateLowResolutiond(BatchDictTransform):
     """Dictionary wrapper for RandSimulateLowResolution.
 
     All keys receive the same zoom factor so paired data stays aligned.
+
+    See ``RandSimulateLowResolution`` for notes on the spatial shift produced
+    by the MONAI-matching defaults and the recommended overrides.
     """
 
     def __init__(

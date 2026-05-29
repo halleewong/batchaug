@@ -221,6 +221,19 @@ The Triton backend provides additional speedups over the PyTorch backend for sel
 | `DivisiblePad` | `DivisiblePadd` | Pad spatial dims to be divisible by k |
 
 
+## MONAI Defaults vs Recommended Settings
+
+To make BatchAug a drop-in replacement, the default arguments of each transform match MONAI's defaults. In a few cases we believe MONAI's defaults have a subtle bug or undesirable behavior, and we recommend overriding them. The defaults are left alone for parity, but the options below are exposed so you can opt in to the fix.
+
+### `RandSimulateLowResolution` — spatial shift from convention mismatch
+
+MONAI's defaults (`downsample_mode="nearest"`, `upsample_mode="trilinear"`) shift the image by ~½ pixel on every down/up roundtrip because `"nearest"` uses corner-aligned indexing while `"trilinear"` is cell-centered. Pick a combo where both steps use the same convention:
+
+- **`downsample_mode="nearest-exact"`, `upsample_mode="trilinear"`** — cell-centered nearest. Same blocky look as MONAI's default, but the shift drops to <0.02 px (except at zoom=0.5).
+- **`downsample_mode="trilinear"`, `upsample_mode="trilinear"`** — fully smooth resample, ~zero shift, but no longer looks like nearest-neighbor downsampling.
+- **`downsample_mode="area"`, `upsample_mode="trilinear"`** — area-averaged downsample (anti-aliased) with smooth upsample, ~zero shift at all zooms.
+
+
 # Development
 
 ## Run Tests
