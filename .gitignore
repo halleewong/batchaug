@@ -1,7 +1,12 @@
 notes
 examples/*.log
+examples/**/*.log
 *.bak
 *.tar.gz
+examples/*/combined.gif
+examples/gifs_multi/
+examples/data/
+examples/gifs+brain/pngs
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

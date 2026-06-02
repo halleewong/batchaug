@@ -1,6 +1,10 @@
 # BatchAug
 
-Batched GPU augmentations for 3D medical imaging data. The API mirrors [MONAI](https://github.com/Project-MONAI/MONAI) but performs augmentations over an entire batch at once, sampling independent random parameters per batch element (similar to [Kornia](https://github.com/kornia/kornia) for 2D). Like MONAI, dictionary transforms apply the same augmentation to multiple volumes and segmentations, keeping paired data aligned. The package provides both PyTorch and Triton backends and automatically selects the fastest one for each transform.
+Batched GPU augmentations for 3D medical imaging data. The API mirrors [MONAI](https://github.com/Project-MONAI/MONAI) but performs augmentations over an entire batch at once, sampling independent random parameters per batch element (similar to [Kornia](https://github.com/kornia/kornia) for 2D). Like MONAI, dictionary transforms apply the same augmentation to volumes and segmentations, keeping paired data aligned. The package provides both PyTorch and Triton backends and automatically selects the fastest one for each transform.
+
+![BatchAug transforms applied to OASIS T1 brain MRI](examples/gifs_brain/combined_small.gif)
+
+See [docs/gallery.md](docs/gallery.md) for per-transform visualizations with the init code used to generate each one.
 
 - **MONAI-compatible API** — drop-in replacements with matching output when B=1
 - **Independent augmentation across batch** (B dimension) — each batch element samples its own random parameters
@@ -95,7 +99,7 @@ for i in range(B):
 augmented = {k: torch.stack(v) for k, v in augmented.items()}
 ```
 
-The same parameters are used for each channel within a batch element. To perform data augmentation independently across channels, simply reshape the data to merge the B and C dimensions, apply the augmentation, then reshape back:
+The same parameters are used for each channel within a batch element. To perform data augmentation independently across channels, simply reshape the data to merge the B and C dimensions (into the B dimension), apply the augmentation, then reshape back:
 
 ```python
 # For independent channel augmentation, merge B and C dims
@@ -155,7 +159,7 @@ from batchaug.triton import ScaleIntensity    # Triton version
 
 ### Benchmarks
 
-Per-transform speedup over MONAI's per-sample loop, using the default auto backend (Triton where faster, PyTorch elsewhere). Measured on NVIDIA L40S with B=5, C=4, 128^3:
+Per-transform speedup over MONAI's per-sample loop on GPU, using the default auto backend (Triton where faster, PyTorch elsewhere). Measured on NVIDIA L40S with B=5, C=4, 128^3:
 
 | Transform | MONAI (ms) | BatchAug (ms) | Speedup |
 |-----------|-----------|--------------|---------|
@@ -176,6 +180,8 @@ The Triton backend provides additional speedups over the PyTorch backend for sel
 | RandAdjustContrast | 1.2–3.0x | Fused normalize + pow + denormalize |
 
 ### Available Transforms
+
+See [docs/gallery.md](docs/gallery.md) for visualizations of each transform on example data (brain MRI).
 
 **Composition**
 
@@ -227,11 +233,29 @@ To make BatchAug a drop-in replacement, the default arguments of each transform 
 
 ### `RandSimulateLowResolution` — spatial shift from convention mismatch
 
-MONAI's defaults (`downsample_mode="nearest"`, `upsample_mode="trilinear"`) shift the image by ~½ pixel on every down/up roundtrip because `"nearest"` uses corner-aligned indexing while `"trilinear"` is cell-centered. Pick a combo where both steps use the same convention:
+MONAI's defaults (`downsample_mode="nearest"`, `upsample_mode="trilinear"`) shift the image by ~½ pixel on every down/up roundtrip because `"nearest"` uses corner-aligned indexing while `"trilinear"` is cell-centered:
 
-- **`downsample_mode="nearest-exact"`, `upsample_mode="trilinear"`** — cell-centered nearest. Same blocky look as MONAI's default, but the shift drops to <0.02 px (except at zoom=0.5).
-- **`downsample_mode="trilinear"`, `upsample_mode="trilinear"`** — fully smooth resample, ~zero shift, but no longer looks like nearest-neighbor downsampling.
-- **`downsample_mode="area"`, `upsample_mode="trilinear"`** — area-averaged downsample (anti-aliased) with smooth upsample, ~zero shift at all zooms.
+![nearest/trilinear (MONAI default)](examples/gifs_brain/randsimulatelowresolution_nearest_trilinear.gif)
+
+Pick a combo where both steps use the same (cell-centered) convention:
+
+- **`downsample_mode="nearest-exact"`, `upsample_mode="trilinear"`** — cell-centered nearest downsample + smooth upsample
+
+  ![nearest-exact/trilinear](examples/gifs_brain/randsimulatelowresolution_nearest-exact_trilinear.gif)
+
+- **`downsample_mode="trilinear"`, `upsample_mode="nearest-exact"`** — anti-aliased downsample + cell-centered nearest upsample
+
+  ![trilinear/nearest-exact](examples/gifs_brain/randsimulatelowresolution_trilinear_nearest-exact.gif)
+
+### `RandGaussianSmooth` / `RandGaussianSharpen` — dark edge halo from zero-padding
+
+MONAI convolves with implicit zero-padding, so voxels within `kernel_size // 2` of a boundary average in zeros and pick up a dark halo (and an inverted bright halo on the unsharp-mask sharpen). The new `padding_mode` argument (default `None` = MONAI behavior) accepts `"reflect"`, `"replicate"`, or `"constant"`. 
+
+![RandGaussianSmooth padding modes](examples/figs_padding/randgaussiansmooth_padding_modes.png)
+
+![RandGaussianSharpen padding modes](examples/figs_padding/randgaussiansharpen_padding_modes.png)
+
+Recommended override: **`padding_mode="reflect"`** 
 
 
 # Development
