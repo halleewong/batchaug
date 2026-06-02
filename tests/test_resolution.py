@@ -123,3 +123,25 @@ class TestRandSimulateLowResolutionBfloat16:
         assert result.dtype == torch.bfloat16
         assert not torch.isnan(result).any()
         assert not torch.isinf(result).any()
+
+
+class TestLowResFallbackMatchesFastPath:
+    """The per-element fallback (used when the gather kernel overflows CUDA's grid-dim cap
+    on very large tensors) must produce results identical to the fast grouped gather path."""
+
+    def test_looped_matches_indexed(self, device):
+        torch.manual_seed(0)
+        x = torch.rand(6, 2, 16, 16, 16, device=device)
+        mask = torch.tensor([True, False, True, True, False, True], device=device)
+        # shared (0.5, 0.5) and (0.7, 0.7) target sizes plus masked-out elements
+        zoom = torch.tensor([0.5, 0.9, 0.5, 0.7, 0.9, 0.7], device=device)
+        t = batchaug.RandSimulateLowResolution(prob=1.0, zoom_range=(0.5, 0.5))
+        spatial_shape = list(x.shape[2:])
+        targets = torch.stack(
+            [(s * zoom).round().long().clamp(min=1) for s in spatial_shape], dim=1
+        )
+        active = mask.nonzero(as_tuple=True)[0]
+        fast = t._lowres_indexed(x, active, targets, spatial_shape)
+        slow = t._lowres_looped(x, active, targets, spatial_shape)
+        assert torch.equal(fast, slow)
+        assert torch.equal(fast[~mask], x[~mask])

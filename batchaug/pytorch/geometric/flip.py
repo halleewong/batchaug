@@ -51,11 +51,8 @@ class RandAxisFlip(BatchTransform):
                 affine[sel, ax, ax] = -1.0
         return affine
 
-    def apply(self, tensor: torch.Tensor, params: dict) -> torch.Tensor:
-        mask = params["mask"]
-        axes = params["axes"]
-        num_spatial = tensor.ndim - 2
-
+    def _flip_indexed(self, tensor, mask, axes, num_spatial):
+        """Fast path: gather each per-axis group, flip it, scatter back."""
         result = tensor.clone()
         for ax in range(num_spatial):
             # Batch elements that should be flipped on this specific axis
@@ -64,6 +61,32 @@ class RandAxisFlip(BatchTransform):
                 # Spatial dim ax maps to tensor dim ax + 2 (skip B, C)
                 result[batch_mask] = torch.flip(result[batch_mask], dims=[ax + 2])
         return result
+
+    def _flip_looped(self, tensor, mask, axes, num_spatial):
+        """Fallback: flip each selected element via basic slicing (no advanced indexing).
+        Touches only selected elements; same result as _flip_indexed."""
+        result = tensor.clone()
+        for i in torch.nonzero(mask, as_tuple=False).flatten().tolist():
+            ax = int(axes[i])
+            result[i:i + 1].copy_(torch.flip(tensor[i:i + 1], dims=[ax + 2]))
+        return result
+
+    def apply(self, tensor: torch.Tensor, params: dict) -> torch.Tensor:
+        mask = params["mask"]
+        axes = params["axes"]
+        num_spatial = tensor.ndim - 2
+
+        # Operate on the selected subset via boolean-mask gather/scatter. On some CUDA builds
+        # (torch 2.8/cu128, not 2.6/cu124) the multi-index gather kernel's grid height scales
+        # with the per-element volume and overflows CUDA's 65535 grid-dim cap above ~2**26
+        # voxels/element, raising "invalid configuration argument". That synchronous launch
+        # error leaves the context healthy, so we fall back to a per-element loop (basic
+        # slicing only — works at any size). Both paths give identical results; normal-sized
+        # batches always take the fast path.
+        try:
+            return self._flip_indexed(tensor, mask, axes, num_spatial)
+        except RuntimeError:
+            return self._flip_looped(tensor, mask, axes, num_spatial)
 
 
 class RandAxisFlipd(BatchDictTransform):
@@ -137,15 +160,37 @@ class RandFlip(BatchTransform):
             affine[mask, ax, ax] = -1.0
         return affine
 
+    def _flip_indexed(self, tensor, mask, dims):
+        """Fast path: gather selected elements, flip, scatter back."""
+        result = tensor.clone()
+        result[mask] = torch.flip(result[mask], dims=dims)
+        return result
+
+    def _flip_looped(self, tensor, mask, dims):
+        """Fallback: flip each selected element via basic slicing (no advanced indexing).
+        Touches only selected elements; same result as _flip_indexed."""
+        result = tensor.clone()
+        for i in torch.nonzero(mask, as_tuple=False).flatten().tolist():
+            result[i:i + 1].copy_(torch.flip(tensor[i:i + 1], dims=dims))
+        return result
+
     def apply(self, tensor: torch.Tensor, params: dict) -> torch.Tensor:
         mask = params["mask"]
         if not mask.any():
             return tensor
 
         dims = self._flip_dims(tensor.ndim)
-        result = tensor.clone()
-        result[mask] = torch.flip(result[mask], dims=dims)
-        return result
+        # Operate on the selected subset via boolean-mask gather/scatter. On some CUDA builds
+        # (torch 2.8/cu128, not 2.6/cu124) the multi-index gather kernel's grid height scales
+        # with the per-element volume and overflows CUDA's 65535 grid-dim cap above ~2**26
+        # voxels/element, raising "invalid configuration argument". That synchronous launch
+        # error leaves the context healthy, so we fall back to a per-element loop (basic
+        # slicing only — works at any size). Both paths give identical results; normal-sized
+        # batches always take the fast path.
+        try:
+            return self._flip_indexed(tensor, mask, dims)
+        except RuntimeError:
+            return self._flip_looped(tensor, mask, dims)
 
 
 class RandFlipd(BatchDictTransform):

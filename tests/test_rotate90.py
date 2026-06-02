@@ -199,3 +199,28 @@ class TestRandRotate90Bfloat16:
         assert result.dtype == torch.bfloat16
         assert not torch.isnan(result).any()
         assert not torch.isinf(result).any()
+
+
+class TestRotate90FallbackMatchesFastPath:
+    """The per-element fallback (used when the gather kernel overflows CUDA's grid-dim cap
+    on very large tensors) must produce results identical to the fast gather/scatter path."""
+
+    def test_looped_matches_indexed(self, device):
+        torch.manual_seed(0)
+        x = torch.rand(6, 2, 16, 16, 16, device=device)
+        mask = torch.tensor([True, False, True, True, False, True], device=device)
+        k_values = torch.tensor([1, 2, 3, 2, 1, 3], device=device)
+        tensor_axes = [2, 3]  # spatial_axes (0, 1)
+        t = batchaug.RandRotate90(prob=1.0, max_k=3, spatial_axes=(0, 1))
+        fast = t._rot90_indexed(x, mask, k_values, tensor_axes)
+        slow = t._rot90_looped(x, mask, k_values, tensor_axes)
+        assert torch.equal(fast, slow)
+
+    def test_looped_leaves_unmasked_unchanged(self, device):
+        torch.manual_seed(0)
+        x = torch.rand(4, 1, 16, 16, 16, device=device)
+        mask = torch.tensor([False, True, False, True], device=device)
+        k_values = torch.tensor([1, 3, 2, 1], device=device)
+        t = batchaug.RandRotate90(prob=1.0, max_k=3, spatial_axes=(0, 1))
+        out = t._rot90_looped(x, mask, k_values, [2, 3])
+        assert torch.equal(out[~mask], x[~mask])

@@ -71,12 +71,43 @@ class RandSimulateLowResolution(BatchTransform):
         )
         return params
 
+    def _interp_kwargs(self, size, mode) -> dict:
+        kwargs: dict = {"size": size, "mode": mode}
+        if mode in self._ALIGN_CORNERS_MODES:
+            kwargs["align_corners"] = self.align_corners
+        return kwargs
+
+    def _lowres_one(self, sub, ts, spatial_shape):
+        """Down- then up-sample one (n, C, *spatial) subset back to spatial_shape."""
+        down = F.interpolate(sub, **self._interp_kwargs(ts, self.downsample_mode))
+        return F.interpolate(down, **self._interp_kwargs(spatial_shape, self.upsample_mode))
+
+    def _lowres_indexed(self, tensor, active, targets, spatial_shape):
+        """Fast path: gather elements sharing a target size, resample the group in one
+        interpolate call, scatter back."""
+        result = tensor.clone()
+        active_targets = targets[active]
+        unique_targets, inverse = torch.unique(active_targets, dim=0, return_inverse=True)
+        for i in range(unique_targets.shape[0]):
+            group_global = active[(inverse == i).nonzero(as_tuple=True)[0]]
+            ts = unique_targets[i].tolist()
+            result[group_global] = self._lowres_one(tensor[group_global], ts, spatial_shape)
+        return result
+
+    def _lowres_looped(self, tensor, active, targets, spatial_shape):
+        """Fallback: resample each selected element via basic slicing (no advanced indexing,
+        so no gather-kernel grid limit). Touches only selected elements; same result as
+        _lowres_indexed."""
+        result = tensor.clone()
+        for idx in active.tolist():
+            ts = targets[idx].tolist()
+            result[idx:idx + 1] = self._lowres_one(tensor[idx:idx + 1], ts, spatial_shape)
+        return result
+
     def apply(self, tensor: torch.Tensor, params: dict) -> torch.Tensor:
         mask = params["mask"]
         zoom_factors = params["zoom_factor"]
         spatial_shape = list(tensor.shape[2:])
-
-        result = tensor.clone()
 
         # Integer target sizes per batch element — (B, ndim_spatial)
         targets = torch.stack(
@@ -87,35 +118,21 @@ class RandSimulateLowResolution(BatchTransform):
             dim=1,
         )
 
-        active = (mask).nonzero(as_tuple=True)[0]
+        active = mask.nonzero(as_tuple=True)[0]
         if active.numel() == 0:
             return tensor
 
-        active_targets = targets[active]
-        unique_targets, inverse = torch.unique(
-            active_targets, dim=0, return_inverse=True
-        )
-
-        for i in range(unique_targets.shape[0]):
-            group_local = (inverse == i).nonzero(as_tuple=True)[0]
-            group_global = active[group_local]
-
-            ts = unique_targets[i].tolist()
-            subset = tensor[group_global]
-
-            down_kwargs: dict = {"size": ts, "mode": self.downsample_mode}
-            if self.downsample_mode in self._ALIGN_CORNERS_MODES:
-                down_kwargs["align_corners"] = self.align_corners
-            down = F.interpolate(subset, **down_kwargs)
-
-            up_kwargs: dict = {"size": spatial_shape, "mode": self.upsample_mode}
-            if self.upsample_mode in self._ALIGN_CORNERS_MODES:
-                up_kwargs["align_corners"] = self.align_corners
-            up = F.interpolate(down, **up_kwargs)
-
-            result[group_global] = up
-
-        return result
+        # Group elements by target size and resample each group via boolean-index
+        # gather/scatter. On some CUDA builds (torch 2.8/cu128, not 2.6/cu124) the multi-index
+        # gather kernel's grid height scales with the per-element volume and overflows CUDA's
+        # 65535 grid-dim cap above ~2**26 voxels/element, raising "invalid configuration
+        # argument". That synchronous launch error leaves the context healthy, so we fall back
+        # to a per-element loop (basic slicing only — works at any size). Both paths give
+        # identical results; normal-sized batches always take the fast path.
+        try:
+            return self._lowres_indexed(tensor, active, targets, spatial_shape)
+        except RuntimeError:
+            return self._lowres_looped(tensor, active, targets, spatial_shape)
 
 
 class RandSimulateLowResolutiond(BatchDictTransform):

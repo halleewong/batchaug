@@ -146,3 +146,28 @@ class TestRandAxisFlipBfloat16:
         assert result.dtype == torch.bfloat16
         assert not torch.isnan(result).any()
         assert not torch.isinf(result).any()
+
+
+class TestFlipFallbackMatchesFastPath:
+    """The per-element fallback (used when the gather kernel overflows CUDA's grid-dim cap
+    on very large tensors) must produce results identical to the fast gather/scatter path."""
+
+    def test_axisflip_looped_matches_indexed(self, device):
+        torch.manual_seed(0)
+        x = torch.rand(6, 2, 12, 14, 16, device=device)
+        mask = torch.tensor([True, False, True, True, False, True], device=device)
+        axes = torch.tensor([0, 1, 2, 1, 0, 2], device=device)
+        t = batchaug.RandAxisFlip(prob=1.0)
+        fast = t._flip_indexed(x, mask, axes, 3)
+        slow = t._flip_looped(x, mask, axes, 3)
+        assert torch.equal(fast, slow)
+
+    def test_randflip_looped_matches_indexed(self, device):
+        torch.manual_seed(0)
+        x = torch.rand(5, 2, 12, 14, 16, device=device)
+        mask = torch.tensor([True, False, True, False, True], device=device)
+        t = batchaug.RandFlip(prob=1.0, spatial_axis=[0, 2])
+        dims = t._flip_dims(x.ndim)
+        fast = t._flip_indexed(x, mask, dims)
+        slow = t._flip_looped(x, mask, dims)
+        assert torch.equal(fast, slow)

@@ -72,6 +72,25 @@ class RandRotate90(BatchTransform):
                 affine[sel, ax1, ax1] = c
         return affine
 
+    def _rot90_indexed(self, tensor, mask, k_values, tensor_axes):
+        """Fast path: gather each k-group, rot90 it, scatter back (one kernel per k)."""
+        result = tensor.clone()
+        for k in range(1, self.max_k + 1):
+            batch_mask = mask & (k_values == k)
+            if batch_mask.any():
+                result[batch_mask] = torch.rot90(result[batch_mask], k, tensor_axes)
+        return result
+
+    def _rot90_looped(self, tensor, mask, k_values, tensor_axes):
+        """Fallback: rot90 each selected element via basic slicing (no advanced indexing,
+        so no gather-kernel grid limit). Touches only selected elements. Same result as
+        _rot90_indexed."""
+        result = tensor.clone()
+        for i in torch.nonzero(mask, as_tuple=False).flatten().tolist():
+            k = int(k_values[i])
+            result[i:i + 1].copy_(torch.rot90(tensor[i:i + 1], k, tensor_axes))
+        return result
+
     def apply(self, tensor: torch.Tensor, params: dict) -> torch.Tensor:
         mask = params["mask"]
         k_values = params["k"]
@@ -83,15 +102,19 @@ class RandRotate90(BatchTransform):
         dim1 = tensor.shape[tensor_axes[1]]
 
         if dim0 == dim1:
-            # Fast path: rot90 preserves shape for square planes
-            result = tensor.clone()
-            for k in range(1, self.max_k + 1):
-                batch_mask = mask & (k_values == k)
-                if batch_mask.any():
-                    result[batch_mask] = torch.rot90(
-                        result[batch_mask], k, tensor_axes
-                    )
-            return result
+            # Fast path: rot90 preserves shape for square planes. Operate on the selected
+            # subset via one boolean-mask gather/scatter per k — cheapest in time and memory.
+            # On some CUDA builds (torch 2.8/cu128, not 2.6/cu124) the multi-index gather
+            # kernel launches a grid whose height scales with the per-element volume and
+            # overflows CUDA's 65535 grid-dim cap above ~2**26 voxels/element, raising
+            # "invalid configuration argument". That is a synchronous launch error that
+            # leaves the context healthy, so we fall back to a per-element loop (basic
+            # slicing only — no advanced indexing — so it works at any size). Both paths
+            # produce identical results; normal-sized batches always take the fast path.
+            try:
+                return self._rot90_indexed(tensor, mask, k_values, tensor_axes)
+            except RuntimeError:
+                return self._rot90_looped(tensor, mask, k_values, tensor_axes)
 
         # Non-square plane: rot90 would change shape, so fall back to
         # affine_grid + grid_sample (consistent with Compose lazy fusion).
