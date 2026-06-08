@@ -21,13 +21,13 @@ See [docs/gallery.md](docs/gallery.md) for per-transform visualizations with the
 | [torchvision](https://github.com/pytorch/vision) | ✅ | ❌ | ❌ | ○ |
 | [kornia](https://github.com/kornia/kornia) | ✅ | ○ | ✅ | ✅ |
 | [batchgenerators](https://github.com/MIC-DKFZ/batchgenerators) | ✅ | ✅ | ✅ | ❌ |
-| [torchio](https://github.com/TorchIO-project/torchio) | ❌ | ✅ | ❌ | ❌ |
+| [TorchIO](https://github.com/TorchIO-project/torchio) | ✅ | ✅ | ❌ | ✅ |
 | [monai](https://github.com/Project-MONAI/MONAI) | ✅ | ✅ | ❌ | ○ |
 | **batchaug** | ❌ | ✅ | ✅ | ✅ |
 
 ○ = partial support
 
-<sup>1</sup> accepts a batch of examples as input and samples augmentation parameters independently for each example
+<sup>1</sup> accepts a batch of examples as input with shape `B C H W D` and samples augmentation parameters independently for each example
 
 ## Installation
 
