@@ -7,6 +7,7 @@ examples/*/combined.gif
 examples/gifs_multi/
 examples/data/
 examples/gifs+brain/pngs
+tests/test_randconv_vs_interseg3d.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

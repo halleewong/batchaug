@@ -18,8 +18,8 @@ class TestRandSimulateLowResolutionMatchesMONAI:
         monai_out = monai_t(input_4d)
 
         ba_t = batchaug.RandSimulateLowResolution(
-            prob=1.0, zoom_range=(zoom, zoom)
-        )
+            prob=1.0, zoom_range=(zoom, zoom), downsample_mode="nearest"
+        )  # downsample_mode="nearest" matches MONAI (BatchAug defaults to "nearest-exact")
         ba_out = ba_t(input_5d)
 
         assert torch.allclose(
@@ -37,8 +37,8 @@ class TestRandSimulateLowResolutionMatchesMONAI:
         monai_out = monai_t(input_4d)
 
         ba_t = batchaug.RandSimulateLowResolution(
-            prob=1.0, zoom_range=(zoom, zoom)
-        )
+            prob=1.0, zoom_range=(zoom, zoom), downsample_mode="nearest"
+        )  # downsample_mode="nearest" matches MONAI (BatchAug defaults to "nearest-exact")
         ba_out = ba_t(input_5d)
 
         assert torch.allclose(
@@ -98,8 +98,8 @@ class TestRandSimulateLowResolutionNonCubic:
         monai_out = monai_t(input_4d)
 
         ba_t = batchaug.RandSimulateLowResolution(
-            prob=1.0, zoom_range=(zoom, zoom)
-        )
+            prob=1.0, zoom_range=(zoom, zoom), downsample_mode="nearest"
+        )  # downsample_mode="nearest" matches MONAI (BatchAug defaults to "nearest-exact")
         ba_out = ba_t(input_5d)
 
         assert ba_out.shape == input_5d.shape
@@ -123,6 +123,59 @@ class TestRandSimulateLowResolutionBfloat16:
         assert result.dtype == torch.bfloat16
         assert not torch.isnan(result).any()
         assert not torch.isinf(result).any()
+
+
+class TestRandSimulateLowResolutionDefaultMode:
+    """BatchAug defaults to downsample_mode='nearest-exact' (not MONAI's 'nearest')."""
+
+    def test_default_is_nearest_exact(self):
+        t = batchaug.RandSimulateLowResolution(prob=1.0)
+        assert t.downsample_mode == "nearest-exact"
+        assert t.upsample_mode == "trilinear"
+
+    def test_default_matches_explicit_nearest_exact(self, vol, device):
+        ba_default = batchaug.RandSimulateLowResolution(
+            prob=1.0, zoom_range=(0.7, 0.7)
+        )
+        ba_explicit = batchaug.RandSimulateLowResolution(
+            prob=1.0, zoom_range=(0.7, 0.7), downsample_mode="nearest-exact"
+        )
+        assert torch.equal(ba_default(vol), ba_explicit(vol))
+
+    def test_default_reduces_shift_vs_monai(self, device):
+        """Default 'nearest-exact' keeps a centered blob's center of mass put;
+        MONAI's 'nearest' shifts it toward +H/+W/+D."""
+        N = 64
+        zoom = 0.7
+        coords = torch.arange(N, dtype=torch.float32, device=device)
+        center = (N - 1) / 2.0
+        g = torch.exp(-((coords - center) ** 2) / (2 * 5.0 ** 2))
+        blob = g[:, None, None] * g[None, :, None] * g[None, None, :]
+        vol = blob[None, None]  # (1, 1, N, N, N)
+
+        def com(x):
+            x = x[0, 0].clamp(min=0)
+            total = x.sum()
+            return torch.stack([
+                (x.sum(dim=(1, 2)) * coords).sum() / total,
+                (x.sum(dim=(0, 2)) * coords).sum() / total,
+                (x.sum(dim=(0, 1)) * coords).sum() / total,
+            ])
+
+        com_in = com(vol)
+        out_default = batchaug.RandSimulateLowResolution(
+            prob=1.0, zoom_range=(zoom, zoom)
+        )(vol)
+        out_monai = batchaug.RandSimulateLowResolution(
+            prob=1.0, zoom_range=(zoom, zoom), downsample_mode="nearest"
+        )(vol)
+
+        shift_default = (com(out_default) - com_in).abs().max().item()
+        shift_monai = (com(out_monai) - com_in).abs().max().item()
+
+        assert shift_default < 0.1
+        assert shift_monai > 0.4
+        assert shift_default < shift_monai
 
 
 class TestLowResFallbackMatchesFastPath:

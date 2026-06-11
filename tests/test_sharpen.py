@@ -29,6 +29,7 @@ class TestRandGaussianSharpenMatchesMONAI:
             sigma2_y=(sigma2[1], sigma2[1]),
             sigma2_z=(sigma2[2], sigma2[2]),
             alpha=(alpha, alpha),
+            padding_mode=None,  # match MONAI's zero-padding (BatchAug defaults to "reflect")
         )
         ba_out = ba_t(input_5d)
 
@@ -118,6 +119,7 @@ class TestRandGaussianSharpenNonCubic:
             sigma2_y=(sigma2[1], sigma2[1]),
             sigma2_z=(sigma2[2], sigma2[2]),
             alpha=(alpha, alpha),
+            padding_mode=None,  # match MONAI's zero-padding (BatchAug defaults to "reflect")
         )
         ba_out = ba_t(input_5d)
 
@@ -139,3 +141,32 @@ class TestRandGaussianSharpenBfloat16:
         result = t(vol_bf16)
         assert result.dtype == torch.bfloat16
         assert not torch.isnan(result).any()
+
+
+class TestRandGaussianSharpenDefaultPadding:
+    """BatchAug defaults to padding_mode='reflect' (not MONAI's zero-padding)."""
+
+    def test_default_is_reflect(self):
+        assert batchaug.RandGaussianSharpen(prob=1.0).padding_mode == "reflect"
+
+    def test_default_matches_explicit_reflect(self, vol, device):
+        kw = dict(
+            prob=1.0,
+            sigma1_x=(0.8, 0.8), sigma1_y=(0.8, 0.8), sigma1_z=(0.8, 0.8),
+            sigma2_x=(0.5, 0.5), sigma2_y=(0.5, 0.5), sigma2_z=(0.5, 0.5),
+            alpha=(15.0, 15.0),
+        )
+        out_default = batchaug.RandGaussianSharpen(**kw)(vol)
+        out_reflect = batchaug.RandGaussianSharpen(padding_mode="reflect", **kw)(vol)
+        assert torch.equal(out_default, out_reflect)
+
+    def test_default_differs_from_monai_at_edges(self, vol, device):
+        kw = dict(
+            prob=1.0,
+            sigma1_x=(0.8, 0.8), sigma1_y=(0.8, 0.8), sigma1_z=(0.8, 0.8),
+            sigma2_x=(0.5, 0.5), sigma2_y=(0.5, 0.5), sigma2_z=(0.5, 0.5),
+            alpha=(15.0, 15.0),
+        )
+        out_default = batchaug.RandGaussianSharpen(**kw)(vol)
+        out_monai = batchaug.RandGaussianSharpen(padding_mode=None, **kw)(vol)
+        assert not torch.allclose(out_default, out_monai, atol=1e-4)

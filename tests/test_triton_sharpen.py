@@ -25,6 +25,9 @@ def _compare_sharpen(vol, sigma1_x=(0.8, 0.8), sigma1_y=(0.8, 0.8), sigma1_z=(0.
         sigma1_x=sigma1_x, sigma1_y=sigma1_y, sigma1_z=sigma1_z,
         sigma2_x=sigma2_x, sigma2_y=sigma2_y, sigma2_z=sigma2_z,
         alpha=alpha,
+        # Triton kernel always zero-pads; compare against PyTorch zero-padding,
+        # not the new "reflect" default.
+        padding_mode=None,
     )
     pt = PTRandGaussianSharpen(**kwargs)
     tr = TRRandGaussianSharpen(**kwargs)
@@ -85,6 +88,7 @@ def test_bfloat16():
         sigma1_x=(0.8, 0.8), sigma1_y=(0.8, 0.8), sigma1_z=(0.8, 0.8),
         sigma2_x=0.4, sigma2_y=0.4, sigma2_z=0.4,
         alpha=(15.0, 15.0),
+        padding_mode=None,  # Triton kernel always zero-pads
     )
     pt = PTRandGaussianSharpen(**kwargs)
     tr = TRRandGaussianSharpen(**kwargs)
@@ -112,3 +116,22 @@ def test_dict_transform():
     result = tr({"vol": vol, "seg": seg})
     assert result["vol"].shape == vol.shape
     assert result["seg"].shape == seg.shape
+
+
+def test_default_is_zero_padding():
+    # PyTorch defaults to "reflect"; the Triton class must default to zero-padding.
+    assert TRRandGaussianSharpen(prob=1.0).padding_mode is None
+
+
+@pytest.mark.parametrize("mode", [None, "constant"])
+def test_supported_padding_modes_ok(mode):
+    assert TRRandGaussianSharpen(prob=1.0, padding_mode=mode).padding_mode == mode
+    TRRandGaussianSharpend(keys=["vol"], prob=1.0, padding_mode=mode)
+
+
+@pytest.mark.parametrize("mode", ["reflect", "replicate"])
+def test_unsupported_padding_modes_raise(mode):
+    with pytest.raises(NotImplementedError):
+        TRRandGaussianSharpen(prob=1.0, padding_mode=mode)
+    with pytest.raises(NotImplementedError):
+        TRRandGaussianSharpend(keys=["vol"], prob=1.0, padding_mode=mode)

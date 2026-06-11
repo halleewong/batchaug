@@ -6,14 +6,43 @@ import torch
 from ...base import BatchDictTransform
 from ...pytorch.intensity.sharpen import RandGaussianSharpen as _PTRandGaussianSharpen
 from ..kernels.separable_conv import separable_gaussian_conv3d_triton
+from .smooth import _check_padding_mode
 
 
 class RandGaussianSharpen(_PTRandGaussianSharpen):
     """Triton-accelerated RandGaussianSharpen (same API as PyTorch version).
 
     Uses Triton separable convolution for both blur passes.
-    Note: Triton kernel only supports zero-padding; padding_mode is ignored.
+
+    Note: the Triton kernel only supports zero-padding. Unlike the PyTorch
+    version (which defaults to ``padding_mode="reflect"``), this class defaults
+    to zero-padding and raises ``NotImplementedError`` for any other mode.
     """
+
+    def __init__(
+        self,
+        prob: float = 0.1,
+        sigma1_x: tuple[float, float] = (0.5, 1.0),
+        sigma1_y: tuple[float, float] = (0.5, 1.0),
+        sigma1_z: tuple[float, float] = (0.5, 1.0),
+        sigma2_x: float | tuple[float, float] = 0.5,
+        sigma2_y: float | tuple[float, float] = 0.5,
+        sigma2_z: float | tuple[float, float] = 0.5,
+        alpha: tuple[float, float] = (10.0, 30.0),
+        padding_mode: str | None = None,
+    ):
+        _check_padding_mode("RandGaussianSharpen", padding_mode)
+        super().__init__(
+            prob=prob,
+            sigma1_x=sigma1_x,
+            sigma1_y=sigma1_y,
+            sigma1_z=sigma1_z,
+            sigma2_x=sigma2_x,
+            sigma2_y=sigma2_y,
+            sigma2_z=sigma2_z,
+            alpha=alpha,
+            padding_mode=padding_mode,
+        )
 
     def apply(self, tensor: torch.Tensor, params: dict) -> torch.Tensor:
         mask = params["mask"]
@@ -39,7 +68,11 @@ class RandGaussianSharpen(_PTRandGaussianSharpen):
 
 
 class RandGaussianSharpend(BatchDictTransform):
-    """Dictionary wrapper for Triton RandGaussianSharpen."""
+    """Dictionary wrapper for Triton RandGaussianSharpen.
+
+    Like the non-dict version, only zero-padding is supported; any other
+    ``padding_mode`` raises ``NotImplementedError``.
+    """
 
     def __init__(
         self,

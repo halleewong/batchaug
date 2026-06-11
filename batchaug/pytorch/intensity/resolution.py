@@ -25,19 +25,23 @@ class RandSimulateLowResolution(BatchTransform):
         ``"nearest-exact"``, ``"trilinear"``, ``"area"``, …). ``align_corners``
         is automatically applied to whichever step uses a mode that supports it.
 
-        The defaults (``downsample_mode="nearest"``, ``upsample_mode="trilinear"``,
-        ``align_corners=False``) match MONAI's ``RandSimulateLowResolution``, but
-        produce a spatial shift of roughly +½ pixel toward +H/+W/+D. The cause is
-        that ``mode="nearest"`` uses a corner-aligned indexing convention while
-        ``trilinear`` with ``align_corners=False`` uses a cell-centered one, so
-        the two steps don't compose cleanly.
+        The default ``downsample_mode="nearest-exact"`` is BatchAug's recommended
+        setting, not MONAI's. MONAI uses ``downsample_mode="nearest"``, which —
+        paired with ``upsample_mode="trilinear"`` (``align_corners=False``) —
+        produces a spatial shift of roughly +½ pixel toward +H/+W/+D on every
+        down/up roundtrip. The cause is that ``mode="nearest"`` uses a
+        corner-aligned indexing convention while ``trilinear`` with
+        ``align_corners=False`` uses a cell-centered one, so the two steps don't
+        compose cleanly. ``"nearest-exact"`` is also cell-centered, so the
+        conventions match: it keeps the blocky "nearest" downsample look while
+        reducing the shift to <0.02 px for zoom factors of 0.6–0.9. (Worst case
+        is exactly zoom=0.5, where nearest quantization still leaves a -0.5 px
+        residual.)
 
-        Recommended overrides:
+        To reproduce MONAI exactly, pass ``downsample_mode="nearest"``.
 
-        * ``downsample_mode="nearest-exact"`` — also cell-centered, so the
-          conventions match. Reduces the shift to <0.02 px for zoom factors of
-          0.6–0.9. Worst case is exactly zoom=0.5, where nearest quantization
-          still leaves a -0.5 px residual.
+        Other shift-free options:
+
         * ``downsample_mode="trilinear"`` — true cell-centered downsample, ~0
           shift at all zoom factors. Smoother result, so it no longer behaves
           like a true "nearest" resample.
@@ -51,7 +55,7 @@ class RandSimulateLowResolution(BatchTransform):
         self,
         prob: float = 0.1,
         zoom_range: tuple[float, float] = (0.5, 1.0),
-        downsample_mode: str = "nearest",
+        downsample_mode: str = "nearest-exact",
         upsample_mode: str = "trilinear",
         align_corners: bool = False,
     ):
@@ -140,8 +144,9 @@ class RandSimulateLowResolutiond(BatchDictTransform):
 
     All keys receive the same zoom factor so paired data stays aligned.
 
-    See ``RandSimulateLowResolution`` for notes on the spatial shift produced
-    by the MONAI-matching defaults and the recommended overrides.
+    See ``RandSimulateLowResolution`` for notes on the default
+    ``downsample_mode="nearest-exact"`` (BatchAug's recommended setting) and how
+    to reproduce MONAI's shifted ``"nearest"`` behavior.
     """
 
     def __init__(
@@ -149,7 +154,7 @@ class RandSimulateLowResolutiond(BatchDictTransform):
         keys: list[str],
         prob: float = 0.1,
         zoom_range: tuple[float, float] = (0.5, 1.0),
-        downsample_mode: str = "nearest",
+        downsample_mode: str = "nearest-exact",
         upsample_mode: str = "trilinear",
         align_corners: bool = False,
     ):

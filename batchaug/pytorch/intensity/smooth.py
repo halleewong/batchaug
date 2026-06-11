@@ -96,6 +96,15 @@ class RandGaussianSmooth(BatchTransform):
     share the same blur across keys.
 
     Input shape: (B, C, H, W, D).
+
+    Note:
+        ``padding_mode`` defaults to ``"reflect"``, which is BatchAug's
+        recommended setting, not MONAI's. MONAI convolves with implicit
+        zero-padding (``padding_mode=None`` here), so voxels within
+        ``kernel_size // 2`` of a boundary average in zeros and pick up a dark
+        halo. ``"reflect"`` mirrors the volume across each boundary and removes
+        the halo cleanly. Pass ``padding_mode=None`` to reproduce MONAI exactly,
+        or ``"replicate"`` / ``"constant"`` for other padding behaviors.
     """
 
     def __init__(
@@ -104,7 +113,7 @@ class RandGaussianSmooth(BatchTransform):
         sigma_x: tuple[float, float] = (0.25, 1.5),
         sigma_y: tuple[float, float] = (0.25, 1.5),
         sigma_z: tuple[float, float] = (0.25, 1.5),
-        padding_mode: str | None = None,
+        padding_mode: str | None = "reflect",
     ):
         super().__init__(prob=prob)
         self.sigma_x = sigma_x
@@ -147,6 +156,10 @@ class RandGaussianSmoothd(BatchDictTransform):
     """Dictionary wrapper for RandGaussianSmooth.
 
     All keys receive the same blur (same sigmas, same mask).
+
+    Like ``RandGaussianSmooth``, ``padding_mode`` defaults to ``"reflect"``
+    (BatchAug's recommended setting); pass ``padding_mode=None`` to reproduce
+    MONAI's zero-padding behavior.
     """
 
     def __init__(
@@ -156,7 +169,7 @@ class RandGaussianSmoothd(BatchDictTransform):
         sigma_x: tuple[float, float] = (0.25, 1.5),
         sigma_y: tuple[float, float] = (0.25, 1.5),
         sigma_z: tuple[float, float] = (0.25, 1.5),
-        padding_mode: str | None = None,
+        padding_mode: str | None = "reflect",
     ):
         transform = RandGaussianSmooth(
             prob=prob, sigma_x=sigma_x, sigma_y=sigma_y, sigma_z=sigma_z,

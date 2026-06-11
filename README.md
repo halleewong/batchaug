@@ -6,7 +6,7 @@ Batched GPU augmentations for 3D medical imaging data. The API mirrors [MONAI](h
 
 See [docs/gallery.md](docs/gallery.md) for per-transform visualizations with the init code used to generate each one.
 
-- **MONAI-compatible API** — drop-in replacements with matching output when B=1
+- **MONAI-compatible API** — drop-in replacements with matching output when B=1 (a few transforms default to [recommended fixes](#recommended-defaults-vs-monai-parity); one argument restores exact MONAI parity)
 - **Independent augmentation across batch** (B dimension) — each batch element samples its own random parameters
 - **Same augmentation across channels** (C dimension) — all paired volumes get the same transform
 - **GPU-native** — all operations stay on CUDA, no CPU roundtrips
@@ -227,35 +227,37 @@ See [docs/gallery.md](docs/gallery.md) for visualizations of each transform on e
 | `DivisiblePad` | `DivisiblePadd` | Pad spatial dims to be divisible by k |
 
 
-## MONAI Defaults vs Recommended Settings
+## Recommended Defaults vs MONAI Parity
 
-To make BatchAug a drop-in replacement, the default arguments of each transform match MONAI's defaults. In a few cases we believe MONAI's defaults have a subtle bug or undesirable behavior, and we recommend overriding them. The defaults are left alone for parity, but the options below are exposed so you can opt in to the fix.
+BatchAug's API mirrors MONAI, and for almost every transform the defaults match MONAI exactly. For a few transforms, though, we believe MONAI's defaults have a subtle bug or undesirable behavior, so **BatchAug defaults to our recommended fix instead of MONAI's value**. Each of these is a single argument away from exact MONAI parity — the table below lists the override to pass if you need bit-for-bit MONAI behavior.
+
+| Transform | Argument | BatchAug default | MONAI parity |
+|---|---|---|---|
+| `RandSimulateLowResolution` | `downsample_mode` | `"nearest-exact"` | `"nearest"` |
+| `RandGaussianSmooth` | `padding_mode` | `"reflect"` | `None` |
+| `RandGaussianSharpen` | `padding_mode` | `"reflect"` | `None` |
 
 ### `RandSimulateLowResolution` — spatial shift from convention mismatch
 
-MONAI's defaults (`downsample_mode="nearest"`, `upsample_mode="trilinear"`) shift the image by ~½ pixel on every down/up roundtrip because `"nearest"` uses corner-aligned indexing while `"trilinear"` is cell-centered:
+MONAI's `downsample_mode="nearest"` paired with `upsample_mode="trilinear"` shifts the image by ~½ pixel on every down/up roundtrip because `"nearest"` uses corner-aligned indexing while `"trilinear"` is cell-centered:
 
 ![nearest/trilinear (MONAI default)](examples/gifs_brain/randsimulatelowresolution_nearest_trilinear.gif)
 
-Pick a combo where both steps use the same (cell-centered) convention:
+BatchAug defaults to **`downsample_mode="nearest-exact"`**, which is also cell-centered so the two steps compose cleanly — it keeps the blocky "nearest" look while bringing the shift to <0.02 px (zoom 0.6–0.9):
 
-- **`downsample_mode="nearest-exact"`, `upsample_mode="trilinear"`** — cell-centered nearest downsample + smooth upsample
+![nearest-exact/trilinear (BatchAug default)](examples/gifs_brain/randsimulatelowresolution_nearest-exact_trilinear.gif)
 
-  ![nearest-exact/trilinear](examples/gifs_brain/randsimulatelowresolution_nearest-exact_trilinear.gif)
-
-- **`downsample_mode="trilinear"`, `upsample_mode="nearest-exact"`** — anti-aliased downsample + cell-centered nearest upsample
-
-  ![trilinear/nearest-exact](examples/gifs_brain/randsimulatelowresolution_trilinear_nearest-exact.gif)
+Pass `downsample_mode="nearest"` to reproduce MONAI exactly. Other shift-free options are `downsample_mode="trilinear"` or `"area"` (true cell-centered resamples, ~0 shift at all zooms, but smoother — no longer a true "nearest" downsample). See [docs/defaults.md](docs/defaults.md) for a full shift table.
 
 ### `RandGaussianSmooth` / `RandGaussianSharpen` — dark edge halo from zero-padding
 
-MONAI convolves with implicit zero-padding, so voxels within `kernel_size // 2` of a boundary average in zeros and pick up a dark halo (and an inverted bright halo on the unsharp-mask sharpen). The new `padding_mode` argument (default `None` = MONAI behavior) accepts `"reflect"`, `"replicate"`, or `"constant"`. 
+MONAI convolves with implicit zero-padding, so voxels within `kernel_size // 2` of a boundary average in zeros and pick up a dark halo (and an inverted bright halo on the unsharp-mask sharpen). BatchAug defaults to **`padding_mode="reflect"`**, which mirrors the volume across each boundary and removes the halo cleanly. The `padding_mode` argument also accepts `"replicate"`, `"constant"`, or `None` (implicit zero-padding = MONAI behavior).
 
 ![RandGaussianSmooth padding modes](examples/figs_padding/randgaussiansmooth_padding_modes.png)
 
 ![RandGaussianSharpen padding modes](examples/figs_padding/randgaussiansharpen_padding_modes.png)
 
-Recommended override: **`padding_mode="reflect"`** 
+Pass `padding_mode=None` to reproduce MONAI exactly.
 
 
 # Development

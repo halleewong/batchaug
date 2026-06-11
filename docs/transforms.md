@@ -143,7 +143,7 @@ Simulates low scanner resolution by downsampling then upsampling. Requires two r
 |---|---|---|---|
 | `prob` | float | 0.1 | Per-element probability |
 | `zoom_range` | tuple(float,float) | (0.5, 1.0) | Scalar zoom factor range. 0.33 = 3x downsampling |
-| `downsample_mode` | str | "nearest" | `F.interpolate` mode for downsampling |
+| `downsample_mode` | str | "nearest-exact" | `F.interpolate` mode for downsampling. BatchAug default; pass `"nearest"` for MONAI parity — see [defaults.md](defaults.md) |
 | `upsample_mode` | str | "trilinear" | `F.interpolate` mode for upsampling |
 
 ### RandConv / RandConvd
@@ -264,6 +264,7 @@ Gaussian blur via separable 3D grouped convolution. Per-axis sigma sampled indep
 | `sigma_x` | tuple(float,float) | (0.25, 1.5) | Sigma range for axis 0 |
 | `sigma_y` | tuple(float,float) | (0.25, 1.5) | Sigma range for axis 1 |
 | `sigma_z` | tuple(float,float) | (0.25, 1.5) | Sigma range for axis 2 |
+| `padding_mode` | str / None | "reflect" | Boundary padding. BatchAug default; pass `None` for MONAI's zero-padding — see [defaults.md](defaults.md) |
 
 ### RandGaussianSharpen / RandGaussianSharpend
 
@@ -275,6 +276,7 @@ Unsharp masking: `blurred + alpha * (blurred - double_blurred)`. Two rounds of G
 | `sigma1_x/y/z` | tuple(float,float) | (0.5, 1.0) | First blur sigma ranges |
 | `sigma2_x/y/z` | float / tuple | 0.5 | Second blur sigma. Scalar: upper bound = sampled sigma1 |
 | `alpha` | tuple(float,float) | (10.0, 30.0) | Sharpening strength |
+| `padding_mode` | str / None | "reflect" | Boundary padding. BatchAug default; pass `None` for MONAI's zero-padding — see [defaults.md](defaults.md) |
 
 ### ScaleIntensity / ScaleIntensityd
 

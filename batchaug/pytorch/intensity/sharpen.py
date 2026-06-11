@@ -21,6 +21,14 @@ class RandGaussianSharpen(BatchTransform):
     If it is a **tuple**, the range is used directly.
 
     Input shape: (B, C, H, W, D).
+
+    Note:
+        ``padding_mode`` defaults to ``"reflect"``, which is BatchAug's
+        recommended setting, not MONAI's. MONAI convolves both blur passes with
+        implicit zero-padding (``padding_mode=None`` here), which produces a dark
+        halo near boundaries and an inverted bright halo from the unsharp-mask
+        subtraction. ``"reflect"`` removes these cleanly. Pass
+        ``padding_mode=None`` to reproduce MONAI exactly.
     """
 
     def __init__(
@@ -33,7 +41,7 @@ class RandGaussianSharpen(BatchTransform):
         sigma2_y: float | tuple[float, float] = 0.5,
         sigma2_z: float | tuple[float, float] = 0.5,
         alpha: tuple[float, float] = (10.0, 30.0),
-        padding_mode: str | None = None,
+        padding_mode: str | None = "reflect",
     ):
         super().__init__(prob=prob)
         self.sigma1_x = sigma1_x
@@ -140,6 +148,10 @@ class RandGaussianSharpend(BatchDictTransform):
     """Dictionary wrapper for RandGaussianSharpen.
 
     All keys receive the same sharpening parameters.
+
+    Like ``RandGaussianSharpen``, ``padding_mode`` defaults to ``"reflect"``
+    (BatchAug's recommended setting); pass ``padding_mode=None`` to reproduce
+    MONAI's zero-padding behavior.
     """
 
     def __init__(
@@ -153,7 +165,7 @@ class RandGaussianSharpend(BatchDictTransform):
         sigma2_y: float | tuple[float, float] = 0.5,
         sigma2_z: float | tuple[float, float] = 0.5,
         alpha: tuple[float, float] = (10.0, 30.0),
-        padding_mode: str | None = None,
+        padding_mode: str | None = "reflect",
     ):
         transform = RandGaussianSharpen(
             prob=prob,

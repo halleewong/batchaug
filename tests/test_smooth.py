@@ -20,6 +20,7 @@ class TestRandGaussianSmoothMatchesMONAI:
             sigma_x=(sigma[0], sigma[0]),
             sigma_y=(sigma[1], sigma[1]),
             sigma_z=(sigma[2], sigma[2]),
+            padding_mode=None,  # match MONAI's zero-padding (BatchAug defaults to "reflect")
         )
         ba_out = ba_t(input_5d)
 
@@ -38,6 +39,7 @@ class TestRandGaussianSmoothMatchesMONAI:
             sigma_x=(sigma[0], sigma[0]),
             sigma_y=(sigma[1], sigma[1]),
             sigma_z=(sigma[2], sigma[2]),
+            padding_mode=None,  # match MONAI's zero-padding (BatchAug defaults to "reflect")
         )
         ba_out = ba_t(input_5d)
 
@@ -100,6 +102,7 @@ class TestRandGaussianSmoothNonCubic:
             sigma_x=(sigma[0], sigma[0]),
             sigma_y=(sigma[1], sigma[1]),
             sigma_z=(sigma[2], sigma[2]),
+            padding_mode=None,  # match MONAI's zero-padding (BatchAug defaults to "reflect")
         )
         ba_out = ba_t(input_5d)
 
@@ -122,3 +125,35 @@ class TestRandGaussianSmoothBfloat16:
         assert result.dtype == torch.bfloat16
         assert not torch.isnan(result).any()
         assert not torch.isinf(result).any()
+
+
+class TestRandGaussianSmoothDefaultPadding:
+    """BatchAug defaults to padding_mode='reflect' (not MONAI's zero-padding)."""
+
+    def test_default_is_reflect(self):
+        assert batchaug.RandGaussianSmooth(prob=1.0).padding_mode == "reflect"
+
+    def test_default_matches_explicit_reflect(self, vol, device):
+        sigma = (0.8, 0.8, 0.8)
+        kw = dict(
+            prob=1.0,
+            sigma_x=(sigma[0], sigma[0]),
+            sigma_y=(sigma[1], sigma[1]),
+            sigma_z=(sigma[2], sigma[2]),
+        )
+        out_default = batchaug.RandGaussianSmooth(**kw)(vol)
+        out_reflect = batchaug.RandGaussianSmooth(padding_mode="reflect", **kw)(vol)
+        assert torch.equal(out_default, out_reflect)
+
+    def test_default_differs_from_monai_at_edges(self, vol, device):
+        """Reflect default and MONAI's zero-padding must diverge near boundaries."""
+        sigma = (0.8, 0.8, 0.8)
+        kw = dict(
+            prob=1.0,
+            sigma_x=(sigma[0], sigma[0]),
+            sigma_y=(sigma[1], sigma[1]),
+            sigma_z=(sigma[2], sigma[2]),
+        )
+        out_default = batchaug.RandGaussianSmooth(**kw)(vol)
+        out_monai = batchaug.RandGaussianSmooth(padding_mode=None, **kw)(vol)
+        assert not torch.allclose(out_default, out_monai, atol=1e-4)

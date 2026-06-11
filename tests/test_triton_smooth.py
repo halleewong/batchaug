@@ -3,7 +3,10 @@ import pytest
 import torch
 
 from batchaug.pytorch.intensity.smooth import RandGaussianSmooth as PT_Smooth
-from batchaug.triton.intensity.smooth import RandGaussianSmooth as TR_Smooth
+from batchaug.triton.intensity.smooth import (
+    RandGaussianSmooth as TR_Smooth,
+    RandGaussianSmoothd as TR_Smoothd,
+)
 
 
 @pytest.fixture
@@ -16,7 +19,7 @@ class TestTritonRandGaussianSmooth:
 
     def test_uniform_sigma(self, device):
         x = torch.rand(4, 3, 16, 16, 16, device=device)
-        pt = PT_Smooth(prob=1.0, sigma_x=(0.8, 0.8), sigma_y=(0.8, 0.8), sigma_z=(0.8, 0.8))
+        pt = PT_Smooth(prob=1.0, sigma_x=(0.8, 0.8), sigma_y=(0.8, 0.8), sigma_z=(0.8, 0.8), padding_mode=None)
         tr = TR_Smooth(prob=1.0, sigma_x=(0.8, 0.8), sigma_y=(0.8, 0.8), sigma_z=(0.8, 0.8))
         torch.manual_seed(0)
         params = pt.sample_params(4, x.shape, device)
@@ -24,7 +27,7 @@ class TestTritonRandGaussianSmooth:
 
     def test_different_sigmas(self, device):
         x = torch.rand(4, 3, 16, 16, 16, device=device)
-        pt = PT_Smooth(prob=1.0, sigma_x=(0.5, 1.5), sigma_y=(0.3, 1.0), sigma_z=(0.7, 1.2))
+        pt = PT_Smooth(prob=1.0, sigma_x=(0.5, 1.5), sigma_y=(0.3, 1.0), sigma_z=(0.7, 1.2), padding_mode=None)
         tr = TR_Smooth(prob=1.0, sigma_x=(0.5, 1.5), sigma_y=(0.3, 1.0), sigma_z=(0.7, 1.2))
         torch.manual_seed(42)
         params = pt.sample_params(4, x.shape, device)
@@ -42,7 +45,7 @@ class TestTritonRandGaussianSmooth:
 
     def test_single_channel(self, device):
         x = torch.rand(2, 1, 16, 16, 16, device=device)
-        pt = PT_Smooth(prob=1.0, sigma_x=(0.8, 0.8), sigma_y=(0.8, 0.8), sigma_z=(0.8, 0.8))
+        pt = PT_Smooth(prob=1.0, sigma_x=(0.8, 0.8), sigma_y=(0.8, 0.8), sigma_z=(0.8, 0.8), padding_mode=None)
         tr = TR_Smooth(prob=1.0, sigma_x=(0.8, 0.8), sigma_y=(0.8, 0.8), sigma_z=(0.8, 0.8))
         torch.manual_seed(0)
         params = pt.sample_params(2, x.shape, device)
@@ -50,7 +53,7 @@ class TestTritonRandGaussianSmooth:
 
     def test_nonsquare(self, device):
         x = torch.rand(2, 1, 12, 16, 20, device=device)
-        pt = PT_Smooth(prob=1.0, sigma_x=(0.8, 0.8), sigma_y=(0.8, 0.8), sigma_z=(0.8, 0.8))
+        pt = PT_Smooth(prob=1.0, sigma_x=(0.8, 0.8), sigma_y=(0.8, 0.8), sigma_z=(0.8, 0.8), padding_mode=None)
         tr = TR_Smooth(prob=1.0, sigma_x=(0.8, 0.8), sigma_y=(0.8, 0.8), sigma_z=(0.8, 0.8))
         torch.manual_seed(0)
         params = pt.sample_params(2, x.shape, device)
@@ -58,7 +61,7 @@ class TestTritonRandGaussianSmooth:
 
     def test_bfloat16(self, device):
         x = torch.rand(2, 3, 16, 16, 16, device=device, dtype=torch.bfloat16)
-        pt = PT_Smooth(prob=1.0, sigma_x=(0.8, 0.8), sigma_y=(0.8, 0.8), sigma_z=(0.8, 0.8))
+        pt = PT_Smooth(prob=1.0, sigma_x=(0.8, 0.8), sigma_y=(0.8, 0.8), sigma_z=(0.8, 0.8), padding_mode=None)
         tr = TR_Smooth(prob=1.0, sigma_x=(0.8, 0.8), sigma_y=(0.8, 0.8), sigma_z=(0.8, 0.8))
         torch.manual_seed(0)
         params = pt.sample_params(2, x.shape, device)
@@ -70,8 +73,28 @@ class TestTritonRandGaussianSmooth:
     def test_large_sigma(self, device):
         """Large sigma produces wider kernels."""
         x = torch.rand(2, 1, 16, 16, 16, device=device)
-        pt = PT_Smooth(prob=1.0, sigma_x=(1.5, 1.5), sigma_y=(1.5, 1.5), sigma_z=(1.5, 1.5))
+        pt = PT_Smooth(prob=1.0, sigma_x=(1.5, 1.5), sigma_y=(1.5, 1.5), sigma_z=(1.5, 1.5), padding_mode=None)
         tr = TR_Smooth(prob=1.0, sigma_x=(1.5, 1.5), sigma_y=(1.5, 1.5), sigma_z=(1.5, 1.5))
         torch.manual_seed(0)
         params = pt.sample_params(2, x.shape, device)
         assert torch.allclose(pt.apply(x, params), tr.apply(x, params), atol=1e-5)
+
+
+class TestTritonSmoothPaddingMode:
+    """Triton smooth only supports zero-padding; other modes raise NotImplementedError."""
+
+    def test_default_is_zero_padding(self):
+        # PyTorch defaults to "reflect"; the Triton class must default to zero-padding.
+        assert TR_Smooth(prob=1.0).padding_mode is None
+
+    @pytest.mark.parametrize("mode", [None, "constant"])
+    def test_supported_modes_ok(self, mode):
+        assert TR_Smooth(prob=1.0, padding_mode=mode).padding_mode == mode
+        TR_Smoothd(keys=["vol"], prob=1.0, padding_mode=mode)
+
+    @pytest.mark.parametrize("mode", ["reflect", "replicate"])
+    def test_unsupported_modes_raise(self, mode):
+        with pytest.raises(NotImplementedError):
+            TR_Smooth(prob=1.0, padding_mode=mode)
+        with pytest.raises(NotImplementedError):
+            TR_Smoothd(keys=["vol"], prob=1.0, padding_mode=mode)
